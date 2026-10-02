@@ -1,0 +1,34 @@
+version: "2"
+
+run:
+    timeout: 5m
+    tests: true
+    build-tags:
+        - integration
+
+linters:
+    default: none
+    enable:
+        - errcheck
+        - govet
+        - ineffassign
+        - misspell
+        - modernize
+        - revive
+        - staticcheck
+        - unused
+    settings:
+        revive:
+            rules:
+                - name: var-naming
+    exclusions:
+        presets: []
+
+formatters:
+    enable:
+        - gofmt
+        - goimports
+    settings:
+        goimports:
+            local-prefixes:
+                - github.com/nversion/agent-gateway-token-helper

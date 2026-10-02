@@ -1,0 +1,96 @@
+name: Build
+
+on:
+    push:
+        branches:
+            - main
+    pull_request:
+        branches:
+            - main
+    workflow_dispatch:
+
+jobs:
+    lint:
+        permissions:
+            contents: read
+        runs-on: ubuntu-26.04
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+            - name: Set up Go
+              uses: actions/setup-go@v7
+              with:
+                  go-version-file: go.mod
+                  cache: true
+            - name: Install golangci-lint
+              run: curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.13.2
+            - name: Run linting and tests
+              run: scripts/linting.sh
+
+    # The token store, lock and browser code differ per OS, and the Keychain
+    # and DPAPI backends only run on their own OS.
+    test:
+        permissions:
+            contents: read
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [macos-latest, windows-latest]
+        runs-on: ${{ matrix.os }}
+        env:
+            AGW_TEST_NATIVE_STORE: "1"
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+            - name: Set up Go
+              uses: actions/setup-go@v7
+              with:
+                  go-version-file: go.mod
+                  cache: true
+            - name: Unit tests
+              shell: bash
+              run: go test ./...
+            - name: Integration tests
+              shell: bash
+              run: go test -tags integration ./test/...
+
+    build:
+        permissions:
+            contents: read
+        strategy:
+            fail-fast: false
+            matrix:
+                include:
+                    # Linux and Windows need no cgo and cross-compile.
+                    - { runner: ubuntu-26.04, goos: linux, goarch: amd64, cgo: "0" }
+                    - { runner: ubuntu-26.04, goos: linux, goarch: arm64, cgo: "0" }
+                    - { runner: ubuntu-26.04, goos: windows, goarch: amd64, cgo: "0" }
+                    - { runner: ubuntu-26.04, goos: windows, goarch: arm64, cgo: "0" }
+                    # macOS needs cgo for the Keychain, so build on macOS.
+                    - { runner: macos-latest, goos: darwin, goarch: amd64, cgo: "1" }
+                    - { runner: macos-latest, goos: darwin, goarch: arm64, cgo: "1" }
+        runs-on: ${{ matrix.runner }}
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+            - name: Set up Go
+              uses: actions/setup-go@v7
+              with:
+                  go-version-file: go.mod
+                  cache: true
+            - name: Build
+              shell: bash
+              env:
+                  GOOS: ${{ matrix.goos }}
+                  GOARCH: ${{ matrix.goarch }}
+                  CGO_ENABLED: ${{ matrix.cgo }}
+              run: |
+                  ext=""
+                  if [[ "$GOOS" == "windows" ]]; then ext=".exe"; fi
+                  go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_SHA::12}" \
+                      -o "build/agw-token-${GOOS}-${GOARCH}${ext}" ./cmd/agw-token
+            - name: Upload
+              uses: actions/upload-artifact@v4
+              with:
+                  name: agw-token-${{ matrix.goos }}-${{ matrix.goarch }}
+                  path: build/

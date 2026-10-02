@@ -1,0 +1,21 @@
+{
+  "editor.formatOnSave": true,
+  "[go]": {
+    "editor.defaultFormatter": "golang.go"
+  },
+  "gopls": {
+    "ui.semanticTokens": true,
+    "staticcheck": true,
+    "analyses": {
+      "shadow": true,
+      "unusedparams": true
+    },
+    "local": "github.com/nversion/agent-gateway-token-helper",
+    "buildFlags": ["-tags=integration"]
+  },
+  "go.formatTool": "goimports",
+  "go.lintTool": "golangci-lint",
+  "go.lintOnSave": "workspace",
+  "go.testFlags": ["-v"],
+  "go.buildTags": "integration"
+}

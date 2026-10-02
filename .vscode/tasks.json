@@ -1,0 +1,25 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      // Background fake IdP for the "agw-token: fake IdP" launch configuration.
+      // The task counts as ready once the server logs its issuer.
+      "label": "fake-oidc",
+      "type": "shell",
+      "command": "go",
+      "args": ["run", "./cmd/fake-oidc", "--addr", "127.0.0.1:9999", "--ttl", "10m", "--rotate-refresh-tokens"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "presentation": { "reveal": "silent", "panel": "dedicated" },
+      "problemMatcher": {
+        "owner": "fake-oidc",
+        "pattern": { "regexp": "^__never_matches__$" },
+        "background": {
+          "activeBegin": true,
+          "beginsPattern": "^__never_matches__$",
+          "endsPattern": "issuer: http://"
+        }
+      }
+    }
+  ]
+}
