@@ -26,3 +26,4 @@ go.work.sum
 /build/
 /agw-token
 /fake-oidc
+/.vscode
