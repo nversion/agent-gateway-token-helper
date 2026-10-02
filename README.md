@@ -128,6 +128,7 @@ Set `AGW_HOME` to keep config, cache and file-store tokens in a single directory
 | Client | gcloud SDK (`32555940559.apps.googleusercontent.com`) | Azure CLI (`04b07795-8ddb-461a-bbee-02f9e1bf7b46`) |
 | Issuer | `https://accounts.google.com` | `https://login.microsoftonline.com/{tenant}/v2.0`, `--tenant` default `organizations` |
 | Scopes | `openid email`, plus `access_type=offline`, `prompt=select_account consent` | `openid profile email offline_access`, plus `prompt=select_account` (same as `az login`) |
+| `--no-account-picker` | sends only `prompt=consent`: reuses the single signed-in account, Google still asks when several are signed in | sends no `prompt`: reuses the browser's signed-in account |
 | Redirect | `http://localhost:<8085…8184>/` (same as gcloud) | `http://localhost:<random>` (same as MSAL) |
 | ID token `aud` | the gcloud client ID | the Azure CLI client ID |
 

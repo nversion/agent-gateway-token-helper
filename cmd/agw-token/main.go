@@ -35,6 +35,7 @@ var flagHelp = map[string]string{
 	"client-secret":     "OAuth client secret, for providers that require one for native apps",
 	"scopes":            "space- or comma-separated scopes (default \"openid email profile offline_access\")",
 	"extra-auth-params": "extra authorization request parameters, as key=value,key=value; added to the preset's, an empty value (prompt=) removes one",
+	"no-account-picker": "reuse the account the browser is signed in with instead of asking (drops prompt=select_account)",
 	"min-valid":         "refresh when the token expires within this duration (default 5m)",
 	"redirect-host":     "redirect URI host: localhost, 127.0.0.1 or [::1] (default localhost)",
 	"redirect-port":     "redirect URI port; 0 picks a free one, N+ tries N and the next 99 (default 0)",
@@ -96,7 +97,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, getenv fu
 	}
 	fs.String("profile", "", "profile in config.json (default \"default\")")
 	for _, k := range config.Keys {
-		if k == "no-browser" {
+		if k == "no-browser" || k == "no-account-picker" {
 			fs.Bool(k, false, flagHelp[k])
 		} else {
 			fs.String(k, "", flagHelp[k])

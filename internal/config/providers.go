@@ -44,14 +44,15 @@ var Presets = map[string]map[string]string{
 
 // defaults apply when neither the preset nor any other source sets a value.
 var defaults = map[string]string{
-	"provider":      "generic",
-	"scopes":        "openid email profile offline_access",
-	"min-valid":     "5m",
-	"redirect-host": "localhost",
-	"redirect-port": "0",
-	"callback-path": "/callback",
-	"no-browser":    "false",
-	"login-timeout": "5m",
-	"store":         "auto",
-	"output":        "raw",
+	"provider":          "generic",
+	"scopes":            "openid email profile offline_access",
+	"min-valid":         "5m",
+	"redirect-host":     "localhost",
+	"redirect-port":     "0",
+	"callback-path":     "/callback",
+	"no-browser":        "false",
+	"no-account-picker": "false",
+	"login-timeout":     "5m",
+	"store":             "auto",
+	"output":            "raw",
 }

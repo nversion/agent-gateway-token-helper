@@ -35,6 +35,7 @@ var Keys = []string{
 	"client-secret",
 	"scopes",
 	"extra-auth-params",
+	"no-account-picker",
 	"min-valid",
 	"redirect-host",
 	"redirect-port",
@@ -205,6 +206,13 @@ func parse(v map[string]string) (*Config, error) {
 		return nil, err
 	}
 	c.AuthParams = params
+	noPicker, err := strconv.ParseBool(v["no-account-picker"])
+	if err != nil {
+		return nil, fmt.Errorf("invalid no-account-picker %q: %w", v["no-account-picker"], err)
+	}
+	if noPicker {
+		dropSelectAccount(params)
+	}
 
 	if c.MinValid, err = parseDuration("min-valid", v["min-valid"]); err != nil {
 		return nil, err
@@ -280,6 +288,10 @@ func isLoopback(host string) bool {
 func (c *Config) Key() string {
 	params := make([]string, 0, len(c.AuthParams))
 	for k, v := range c.AuthParams {
+		if k == "prompt" {
+			// Only changes the login UI, not the token.
+			continue
+		}
 		params = append(params, k+"="+v)
 	}
 	slices.Sort(params)
@@ -429,4 +441,16 @@ func parseDuration(key, s string) (time.Duration, error) {
 		return 0, fmt.Errorf("invalid %s %q: want a duration like 5m", key, s)
 	}
 	return d, nil
+}
+
+// dropSelectAccount removes select_account from prompt so the provider reuses
+// the account the browser is already signed in with instead of showing its
+// account picker. Other prompt values, such as Google's consent, stay.
+func dropSelectAccount(params map[string]string) {
+	prompts := slices.DeleteFunc(strings.Fields(params["prompt"]), func(p string) bool { return p == "select_account" })
+	if len(prompts) == 0 {
+		delete(params, "prompt")
+	} else {
+		params["prompt"] = strings.Join(prompts, " ")
+	}
 }

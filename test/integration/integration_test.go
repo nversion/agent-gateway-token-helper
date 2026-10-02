@@ -432,3 +432,12 @@ func TestGooglePreset(t *testing.T) {
 		t.Fatalf("redirect_uri %s, want http://localhost:<8085-8184>/ like gcloud", ru)
 	}
 }
+
+func TestNoAccountPicker(t *testing.T) {
+	p := oidctest.Start(t, oidctest.Options{ClientID: config.Presets["entra"]["client-id"], EntraTenantID: "t1"})
+	c := &cli{t: t, home: t.TempDir(), args: []string{"--provider", "entra", "--issuer", p.Issuer(), "--no-account-picker"}}
+	c.mustToken()
+	if q := p.LastAuthorizeParams(); q.Has("prompt") || q.Has("login_hint") {
+		t.Fatalf("authorize params %v, want no prompt", q)
+	}
+}

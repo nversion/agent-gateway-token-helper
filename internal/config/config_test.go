@@ -132,6 +132,39 @@ func TestExtraAuthParamsMergeWithPreset(t *testing.T) {
 	}
 }
 
+func TestNoAccountPicker(t *testing.T) {
+	home := t.TempDir()
+	tests := []struct {
+		provider string
+		want     map[string]string
+	}{
+		{"google", map[string]string{"access_type": "offline", "prompt": "consent"}},
+		{"entra", map[string]string{}},
+	}
+	for _, tt := range tests {
+		c, err := load(t, home, map[string]string{"provider": tt.provider, "no-account-picker": "true"}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !maps.Equal(c.AuthParams, tt.want) {
+			t.Errorf("%s: params %v, want %v", tt.provider, c.AuthParams, tt.want)
+		}
+	}
+
+	// The picker is UI only, so it must not change the token cache key.
+	with, err := load(t, home, map[string]string{"provider": "entra"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	without, err := load(t, home, map[string]string{"provider": "entra", "extra-auth-params": "prompt="}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if with.Key() != without.Key() {
+		t.Error("prompt changed the cache key")
+	}
+}
+
 func TestValidationErrors(t *testing.T) {
 	home := t.TempDir()
 	base := map[string]string{"issuer": "https://issuer.example", "client-id": "c"}
@@ -179,7 +212,7 @@ func TestKeyChangesWithConfig(t *testing.T) {
 	if a.Key() != b.Key() {
 		t.Error("scope order should not change the key")
 	}
-	b.AuthParams = map[string]string{"prompt": "consent"}
+	b.AuthParams = map[string]string{"audience": "gateway"}
 	if a.Key() == b.Key() {
 		t.Error("auth params should change the key")
 	}
