@@ -2,8 +2,10 @@ name: Attest signed release
 
 # Run by scripts/release-upload.sh after the signed files are uploaded, so that
 # `gh attestation verify` works on what users download, not just on the unsigned
-# binaries the Build workflow attested. It refuses to attest Linux and Windows
-# binaries that differ from the reproducible build by more than a signature.
+# binaries the Build workflow attested. It rebuilds Linux and Windows from the tag
+# and refuses to attest binaries that differ from that build by more than a
+# signature. The release's own SHA256SUMS-unsigned is only checked against the
+# rebuild, never trusted: whoever could replace a binary could replace it too.
 
 on:
     workflow_dispatch:
@@ -39,15 +41,37 @@ jobs:
                   mkdir release
                   gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir release
                   ls -l release
+            # Linux and Windows builds are reproducible, so this is what CI built for the
+            # tag, made from the checked-out source rather than taken from the release.
+            - name: Rebuild Linux and Windows from the tag
+              shell: bash
+              env:
+                  TAG: ${{ inputs.tag }}
+              run: |
+                  for target in "linux amd64" "linux arm64" "windows amd64" "windows arm64"; do
+                      VERSION="$TAG" scripts/build.sh $target
+                  done
+                  (cd build && sha256sum agw-token-*) > "$RUNNER_TEMP/SHA256SUMS-rebuilt"
+                  cat "$RUNNER_TEMP/SHA256SUMS-rebuilt"
+            # Users compare their own builds against SHA256SUMS-unsigned, so its Linux and
+            # Windows lines must be exactly the rebuilt ones.
+            - name: Check SHA256SUMS-unsigned against the rebuild
+              shell: bash
+              run: |
+                  [[ -f release/SHA256SUMS-unsigned ]] || { echo "SHA256SUMS-unsigned missing" >&2; exit 1; }
+                  if bad="$(grep -E -- '-(linux|windows)-' release/SHA256SUMS-unsigned | grep -vxF -f "$RUNNER_TEMP/SHA256SUMS-rebuilt")"; then
+                      echo "SHA256SUMS-unsigned does not match the rebuild:" >&2
+                      echo "$bad" >&2
+                      exit 1
+                  fi
             - name: Install msitools
               run: sudo apt-get update && sudo apt-get install -y msitools
             # The Windows Installer packages are not reproducible themselves, so their
             # executables are extracted and checked like the rest.
-            - name: Check Linux and Windows files against the unsigned build
+            - name: Check Linux and Windows files against the rebuild
               shell: bash
               run: |
                   cd release
-                  [[ -f SHA256SUMS-unsigned ]] || { echo "SHA256SUMS-unsigned missing" >&2; exit 1; }
                   shopt -s nullglob
                   files=()
                   for f in *-linux-* *-windows-*; do
@@ -62,7 +86,7 @@ jobs:
                       files+=("${exes[@]}")
                   done
                   [[ ${#files[@]} -gt 0 ]] || { echo "no Linux or Windows files" >&2; exit 1; }
-                  go run ../cmd/verify-build SHA256SUMS-unsigned "${files[@]}"
+                  go run ../cmd/verify-build "$RUNNER_TEMP/SHA256SUMS-rebuilt" "${files[@]}"
             # Attestations on a private repository need a paid GitHub plan; the check
             # above still runs.
             - name: Attest
