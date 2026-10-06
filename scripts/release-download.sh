@@ -4,9 +4,9 @@
 #
 # Push the tag first (git tag v1.2.3 && git push origin v1.2.3). The script finds the
 # Build workflow run for the tag's commit, waits for it if it is still running, and
-# downloads every agw-token-* artifact into dist/<tag>/unsigned. For a public repository
-# it checks each against the build provenance attestation the run made, so only binaries
-# GitHub built from the tag get signed.
+# downloads the agw-token-<platform> artifacts into dist/<tag>/unsigned. For a public
+# repository it checks each against the build provenance attestation the run made, so only
+# binaries GitHub built from the tag get signed.
 
 # shellcheck source=scripts/release-lib.sh
 source "$(dirname "$0")/release-lib.sh"
@@ -38,7 +38,13 @@ out="$DIST/unsigned"
 download="$DIST/download"
 rm -rf "$out" "$download"
 mkdir -p "$out" "$download"
-step gh run download "$run_id" --repo "$repo" --dir "$download" --pattern 'agw-token-*'
+# Name each artifact rather than matching a prefix, so other artifacts of the run (such as
+# the unsigned test MSIs) never end up among the binaries to sign.
+names=()
+for platform in "${PLATFORMS[@]}"; do
+    names+=(--name "agw-token-$platform")
+done
+step gh run download "$run_id" --repo "$repo" --dir "$download" "${names[@]}"
 
 # gh puts each artifact in a directory named after it, which is also the name of the
 # plain binary inside, so move the files out into a separate directory.

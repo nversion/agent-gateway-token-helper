@@ -137,8 +137,8 @@ jobs:
                   done
                   cp LICENSE README.md "$stage/"
                   scripts/build-msi.sh windows-${{ matrix.goarch }} "$VERSION" "$stage" msi/agw-token-windows-${{ matrix.goarch }}.msi
-            # Not named agw-token-*: scripts/release-download.sh takes every artifact
-            # with that prefix as a release binary, and these MSIs are unsigned.
+            # Not named agw-token-*, which is reserved for the release binaries that
+            # scripts/release-download.sh fetches by name.
             - name: Upload
               uses: actions/upload-artifact@v4
               with:

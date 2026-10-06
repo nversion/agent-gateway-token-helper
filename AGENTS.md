@@ -68,8 +68,9 @@ Releases are signed by hand on a Mac, from the binaries CI builds for a `v*` tag
 4. `scripts/release-upload.sh v1.2.3` - creates or updates a draft GitHub release;
    add `--publish` to publish it. It refuses unsigned builds unless `--allow-unsigned`.
    A full upload then runs the "Attest signed release" workflow
-   (`.github/workflows/attest-signed.yaml`), which checks the Linux and Windows assets
-   against `SHA256SUMS-unsigned` and attests every asset.
+   (`.github/workflows/attest-signed.yaml`), which rebuilds Linux and Windows from the
+   tag, checks the Linux and Windows assets and `SHA256SUMS-unsigned` against that
+   rebuild, and attests every asset.
 
 Prerequisites: `gh auth login`, `az login` as a user with the Certificate Profile
 Signer role on the signing account, a Java runtime, msitools (`brew install msitools`), the Developer ID Application
