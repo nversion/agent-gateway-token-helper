@@ -87,8 +87,14 @@ jobs:
               run: |
                   ext=""
                   if [[ "$GOOS" == "windows" ]]; then ext=".exe"; fi
-                  go build -trimpath -ldflags "-s -w -X main.version=${GITHUB_SHA::12}" \
-                      -o "build/agw-token-${GOOS}-${GOARCH}${ext}" ./cmd/agw-token
+                  # One binary without a default provider, and one per preset
+                  # for harnesses that cannot pass --provider.
+                  for provider in "" google entra; do
+                      name="agw-token${provider:+-$provider}-${GOOS}-${GOARCH}${ext}"
+                      go build -trimpath \
+                          -ldflags "-s -w -X main.version=${GITHUB_SHA::12} -X main.defaultProvider=${provider}" \
+                          -o "build/${name}" ./cmd/agw-token
+                  done
             - name: Upload
               uses: actions/upload-artifact@v4
               with:
