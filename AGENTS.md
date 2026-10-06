@@ -32,21 +32,36 @@ signatures aren't verified).
 - `AGW_TEST_NATIVE_STORE=1 go test ./internal/store` - round-trips through the real
   Keychain / DPAPI / Secret Service. Opt-in because it touches the user's secret store.
 
+## Building
+
+`scripts/build.sh <goos> <goarch>` is the only place build flags live; CI's build job
+calls it. It pins the exact Go version from the `go` line in `go.mod`, so bumping that
+line changes every release hash. Linux and Windows builds must stay byte-for-byte
+reproducible (the `reproducible` CI job builds them twice and diffs): no cgo, no VCS
+stamping, nothing time- or path-dependent in ldflags. macOS needs cgo and is not
+reproducible.
+
 ## Releasing
 
 Releases are signed by hand on a Mac, from the binaries CI builds for a `v*` tag:
 
 1. `git tag v1.2.3 && git push origin v1.2.3` - the Build workflow builds the tag with
-   `main.version` set to `1.2.3`.
-2. `scripts/release-download.sh v1.2.3` - waits for that run and downloads its binaries
-   into `dist/v1.2.3/unsigned`.
+   `main.version` set to `1.2.3` and attests each binary.
+2. `scripts/release-download.sh v1.2.3` - waits for that run, downloads its binaries
+   into `dist/v1.2.3/unsigned` and checks their attestations.
 3. `scripts/release-sign.sh v1.2.3 --apple-identity ... --notary-profile ...
    --azure-endpoint ... --azure-account ... --azure-profile ...` - codesigns and
    notarizes the macOS binaries, signs the Windows ones with the vendored
    `tools/jsign-*.jar` (Azure Artifact Signing), and packages everything into
    `dist/v1.2.3/release`. `--skip-macos` / `--skip-windows` leave one OS unsigned.
+   Besides `SHA256SUMS` of the signed files it writes `SHA256SUMS-unsigned`, which users
+   compare their own builds against, and checks with `cmd/verify-build` that signing
+   only added a signature to the Windows binaries.
 4. `scripts/release-upload.sh v1.2.3` - creates or updates a draft GitHub release;
    add `--publish` to publish it. It refuses unsigned builds unless `--allow-unsigned`.
+   A full upload then runs the "Attest signed release" workflow
+   (`.github/workflows/attest-signed.yaml`), which checks the Linux and Windows assets
+   against `SHA256SUMS-unsigned` and attests every asset.
 
 Prerequisites: `gh auth login`, `az login` as a user with the Certificate Profile
 Signer role on the signing account, a Java runtime, the Developer ID Application

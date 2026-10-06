@@ -6,8 +6,10 @@
 #   --allow-unsigned   upload even if macOS or Windows signing was skipped
 #   --force            replace assets on a release that is already published
 #   --only OSES        upload only these platforms, comma separated from linux, windows
-#                      and darwin, e.g. --only windows. The uploaded SHA256SUMS then
-#                      covers just those files; a later full upload replaces it.
+#                      and darwin, e.g. --only windows. The uploaded SHA256SUMS and
+#                      SHA256SUMS-unsigned then cover just those files; a later full upload
+#                      replaces them. No attestation is requested.
+#   --no-attest        do not run the "Attest signed release" workflow
 #
 # The release is created as a draft with generated notes if it does not exist yet.
 # Tags with a suffix such as v1.2.3-rc1 are marked as prereleases.
@@ -25,12 +27,14 @@ publish=0
 allow_unsigned=0
 force=0
 only=""
+attest=1
 while [[ $# -gt 0 ]]; do
     case "$1" in
     --publish) publish=1; shift ;;
     --allow-unsigned) allow_unsigned=1; shift ;;
     --force) force=1; shift ;;
     --only) only="${2:?}"; shift 2 ;;
+    --no-attest) attest=0; shift ;;
     -h | --help) usage; exit 0 ;;
     *) die "unknown flag $1" ;;
     esac
@@ -41,6 +45,8 @@ gh auth status >/dev/null 2>&1 || die "gh is not signed in, run: gh auth login"
 
 release="$DIST/release"
 [[ -f "$release/SHA256SUMS" ]] || die "$release/SHA256SUMS not found, run scripts/release-sign.sh $TAG first"
+[[ -f "$release/SHA256SUMS-unsigned" ]] ||
+    die "$release/SHA256SUMS-unsigned not found, re-run scripts/release-sign.sh $TAG"
 
 info "Checking SHA256SUMS"
 (cd "$release" && shasum -a 256 --check --quiet SHA256SUMS) || die "files in $release do not match SHA256SUMS"
@@ -96,10 +102,21 @@ else
     for f in "${assets[@]}"; do
         awk -v name="$(basename "$f")" '$2 == name' "$release/SHA256SUMS"
     done >"$partial/SHA256SUMS"
-    assets+=("$partial/SHA256SUMS")
+    for os in "${oses[@]}"; do
+        awk -v os="$os" 'index($2, "-" os "-")' "$release/SHA256SUMS-unsigned"
+    done >"$partial/SHA256SUMS-unsigned"
+    assets+=("$partial/SHA256SUMS" "$partial/SHA256SUMS-unsigned")
 fi
 info "Uploading ${#assets[@]} files"
 gh release upload "$TAG" "${assets[@]}" --clobber
+
+if [[ "$attest" == 1 && -z "$only" ]]; then
+    # The workflow file is taken from the default branch, the code it runs from the tag.
+    step gh workflow run attest-signed.yaml -f tag="$TAG"
+    info "Attestation requested, follow it with: gh run list --workflow attest-signed.yaml"
+elif [[ -n "$only" ]]; then
+    info "Partial upload, not attesting; a full upload requests the attestation"
+fi
 
 if [[ "$publish" == 1 ]]; then
     step gh release edit "$TAG" --draft=false

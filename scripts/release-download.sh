@@ -4,7 +4,9 @@
 #
 # Push the tag first (git tag v1.2.3 && git push origin v1.2.3). The script finds the
 # Build workflow run for the tag's commit, waits for it if it is still running, and
-# downloads every agw-token-* artifact into dist/<tag>/unsigned.
+# downloads every agw-token-* artifact into dist/<tag>/unsigned, checking each against
+# the build provenance attestation the run made, so only binaries GitHub built from
+# the tag get signed.
 
 # shellcheck source=scripts/release-lib.sh
 source "$(dirname "$0")/release-lib.sh"
@@ -54,6 +56,13 @@ for os in linux windows darwin; do
 done
 [[ "$missing" == 0 ]] || die "the run did not produce every expected binary"
 chmod +x "$out"/agw-token-*
+
+info "Checking build provenance attestations"
+for f in "$out"/agw-token-*; do
+    gh attestation verify "$f" --repo "$repo" --source-digest "$sha" --source-ref "refs/tags/$TAG" \
+        --signer-workflow "$repo/.github/workflows/build.yaml" >/dev/null ||
+        die "$(basename "$f") has no valid attestation from the $TAG build"
+done
 
 cat >"$DIST/source.txt" <<EOF
 tag=$TAG

@@ -33,6 +33,42 @@ also attached individually, and `SHA256SUMS` lists checksums for every file:
 shasum -a 256 --check --ignore-missing SHA256SUMS
 ```
 
+### Verifying a release against the source
+
+Linux and Windows builds are reproducible: building a release tag yourself gives
+byte-for-byte the binaries CI built, before signing. The release lists their checksums in
+`SHA256SUMS-unsigned`. With Go installed (the exact version in `go.mod` is downloaded
+automatically):
+
+```sh
+git clone https://github.com/nversion/agent-gateway-token-helper && cd agent-gateway-token-helper
+git checkout v1.2.3
+gh release download v1.2.3 --pattern SHA256SUMS-unsigned   # or from the releases page
+scripts/build.sh linux amd64           # or windows amd64, windows arm64, linux arm64
+cd build && shasum -a 256 --check --ignore-missing ../SHA256SUMS-unsigned
+```
+
+The Windows binaries you download carry an Authenticode signature, so their checksum
+differs from your build. `verify-build` removes the signature and compares what is left,
+for single binaries or whole release archives:
+
+```sh
+go run ./cmd/verify-build SHA256SUMS-unsigned agw-token-1.2.3-windows-amd64.zip
+```
+
+macOS builds are not reproducible: they use cgo for the Keychain, and the C compiler and
+SDK version end up in the binary. Check those through their signature and notarization,
+and the build provenance attestation instead.
+
+Every release file has a GitHub build provenance attestation. It ties the file to this
+repository, the tag's commit and the workflow that built it:
+
+```sh
+gh attestation verify agw-token-1.2.3-darwin-arm64.zip --repo nversion/agent-gateway-token-helper
+codesign --verify --strict --verbose=2 agw-token     # after unzipping, macOS only
+spctl --assess --type install --verbose agw-token-1.2.3-darwin-arm64.zip
+```
+
 Or build from source:
 
 ```sh
@@ -181,6 +217,8 @@ Build a binary that falls back to a preset when nothing else picks a provider:
 ```sh
 go build -ldflags "-X main.defaultProvider=google" -o agw-token ./cmd/agw-token
 ```
+
+`scripts/build.sh` builds all three variants for a platform the way CI does.
 
 `agw-token version` shows the compiled-in provider. An unknown name makes every run fail
 with a configuration error.

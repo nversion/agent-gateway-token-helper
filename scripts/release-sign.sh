@@ -22,6 +22,8 @@
 #   agw-token-<version>-windows-<arch>.zip
 #   agw-token-<version>-linux-<arch>.tar.gz
 #   the individual signed binaries under their CI names, and SHA256SUMS.
+#   SHA256SUMS-unsigned, the sums of the binaries as CI built them, which is what
+#   users get from scripts/build.sh and what cmd/verify-build checks downloads against.
 
 # shellcheck source=scripts/release-lib.sh
 source "$(dirname "$0")/release-lib.sh"
@@ -68,7 +70,7 @@ fi
 
 [[ -d "$DIST/unsigned" ]] || die "$DIST/unsigned not found, run scripts/release-download.sh $TAG first"
 
-need shasum zip tar ditto
+need shasum zip tar ditto go
 
 # Check every prerequisite before signing anything.
 if [[ "$sign_windows" == 1 ]]; then
@@ -96,6 +98,7 @@ release="$DIST/release"
 rm -rf "$signed" "$stage" "$release" "$DIST/notarized.sha256" "$DIST/signing.txt"
 mkdir -p "$signed" "$stage" "$release"
 cp -p "$DIST/unsigned"/agw-token-* "$signed/"
+(cd "$DIST/unsigned" && shasum -a 256 agw-token-*) >"$release/SHA256SUMS-unsigned"
 
 # --- Windows ---------------------------------------------------------------
 
@@ -135,6 +138,9 @@ if [[ "$sign_windows" == 1 ]]; then
     else
         info "osslsigncode not installed, skipping signature verification (brew install osslsigncode)"
     fi
+    # Signing must only have added a signature, or the release cannot be checked
+    # against a reproducible build.
+    step go run ./cmd/verify-build "$release/SHA256SUMS-unsigned" "${exes[@]}" >/dev/null
     echo "windows" >>"$DIST/signing.txt"
 fi
 

@@ -60,18 +60,22 @@ jobs:
     build:
         permissions:
             contents: read
+            # Tag builds get a build provenance attestation; scripts/release-download.sh
+            # checks it before signing.
+            id-token: write
+            attestations: write
         strategy:
             fail-fast: false
             matrix:
                 include:
                     # Linux and Windows need no cgo and cross-compile.
-                    - { runner: ubuntu-26.04, goos: linux, goarch: amd64, cgo: "0" }
-                    - { runner: ubuntu-26.04, goos: linux, goarch: arm64, cgo: "0" }
-                    - { runner: ubuntu-26.04, goos: windows, goarch: amd64, cgo: "0" }
-                    - { runner: ubuntu-26.04, goos: windows, goarch: arm64, cgo: "0" }
+                    - { runner: ubuntu-26.04, goos: linux, goarch: amd64 }
+                    - { runner: ubuntu-26.04, goos: linux, goarch: arm64 }
+                    - { runner: ubuntu-26.04, goos: windows, goarch: amd64 }
+                    - { runner: ubuntu-26.04, goos: windows, goarch: arm64 }
                     # macOS needs cgo for the Keychain, so build on macOS.
-                    - { runner: macos-latest, goos: darwin, goarch: amd64, cgo: "1" }
-                    - { runner: macos-latest, goos: darwin, goarch: arm64, cgo: "1" }
+                    - { runner: macos-latest, goos: darwin, goarch: amd64 }
+                    - { runner: macos-latest, goos: darwin, goarch: arm64 }
         runs-on: ${{ matrix.runner }}
         steps:
             - name: Checkout
@@ -81,27 +85,48 @@ jobs:
               with:
                   go-version-file: go.mod
                   cache: true
+            # scripts/build.sh sets the toolchain, cgo and flags, and names the version
+            # after the tag (without its v) or the commit.
             - name: Build
               shell: bash
               env:
-                  GOOS: ${{ matrix.goos }}
-                  GOARCH: ${{ matrix.goarch }}
-                  CGO_ENABLED: ${{ matrix.cgo }}
-              run: |
-                  ext=""
-                  if [[ "$GOOS" == "windows" ]]; then ext=".exe"; fi
-                  version="${GITHUB_SHA::12}"
-                  if [[ "$GITHUB_REF_TYPE" == "tag" ]]; then version="${GITHUB_REF_NAME#v}"; fi
-                  # One binary without a default provider, and one per preset
-                  # for harnesses that cannot pass --provider.
-                  for provider in "" google entra; do
-                      name="agw-token${provider:+-$provider}-${GOOS}-${GOARCH}${ext}"
-                      go build -trimpath \
-                          -ldflags "-s -w -X main.version=${version} -X main.defaultProvider=${provider}" \
-                          -o "build/${name}" ./cmd/agw-token
-                  done
+                  VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
+              run: scripts/build.sh ${{ matrix.goos }} ${{ matrix.goarch }}
+            - name: Attest
+              if: github.ref_type == 'tag'
+              uses: actions/attest-build-provenance@v4
+              with:
+                  subject-path: build/agw-token-*
             - name: Upload
               uses: actions/upload-artifact@v4
               with:
                   name: agw-token-${{ matrix.goos }}-${{ matrix.goarch }}
                   path: build/
+
+    # Builds Linux and Windows twice, from different directories with empty build
+    # caches, and fails if any binary differs: the release sums depend on it.
+    reproducible:
+        permissions:
+            contents: read
+        runs-on: ubuntu-26.04
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+            - name: Set up Go
+              uses: actions/setup-go@v7
+              with:
+                  go-version-file: go.mod
+                  cache: false
+            - name: Build twice and compare
+              shell: bash
+              run: |
+                  second="$RUNNER_TEMP/second"
+                  git worktree add --detach "$second" HEAD
+                  for target in "linux amd64" "linux arm64" "windows amd64" "windows arm64"; do
+                      GOCACHE="$RUNNER_TEMP/cache1" VERSION=1.0.0 scripts/build.sh $target
+                      (cd "$second" && GOCACHE="$RUNNER_TEMP/cache2" VERSION=1.0.0 scripts/build.sh $target)
+                  done
+                  (cd build && sha256sum agw-token-*) > "$RUNNER_TEMP/first.sums"
+                  (cd "$second/build" && sha256sum agw-token-*) > "$RUNNER_TEMP/second.sums"
+                  cat "$RUNNER_TEMP/first.sums"
+                  diff "$RUNNER_TEMP/first.sums" "$RUNNER_TEMP/second.sums"

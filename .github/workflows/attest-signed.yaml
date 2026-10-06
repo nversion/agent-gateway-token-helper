@@ -1,0 +1,54 @@
+name: Attest signed release
+
+# Run by scripts/release-upload.sh after the signed files are uploaded, so that
+# `gh attestation verify` works on what users download, not just on the unsigned
+# binaries the Build workflow attested. It refuses to attest Linux and Windows
+# binaries that differ from the reproducible build by more than a signature.
+
+on:
+    workflow_dispatch:
+        inputs:
+            tag:
+                description: Release tag, e.g. v1.2.3
+                required: true
+
+jobs:
+    attest:
+        permissions:
+            # Write is needed to read a draft release.
+            contents: write
+            id-token: write
+            attestations: write
+        runs-on: ubuntu-26.04
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+              with:
+                  ref: ${{ inputs.tag }}
+            - name: Set up Go
+              uses: actions/setup-go@v7
+              with:
+                  go-version-file: go.mod
+                  cache: false
+            - name: Download release
+              shell: bash
+              env:
+                  GH_TOKEN: ${{ github.token }}
+                  TAG: ${{ inputs.tag }}
+              run: |
+                  mkdir release
+                  gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir release
+                  ls -l release
+            - name: Check Linux and Windows files against the unsigned build
+              shell: bash
+              run: |
+                  cd release
+                  [[ -f SHA256SUMS-unsigned ]] || { echo "SHA256SUMS-unsigned missing" >&2; exit 1; }
+                  shopt -s nullglob
+                  files=(*-linux-* *-windows-*)
+                  [[ ${#files[@]} -gt 0 ]] || { echo "no Linux or Windows files" >&2; exit 1; }
+                  go run ../cmd/verify-build SHA256SUMS-unsigned "${files[@]}"
+            - name: Attest
+              uses: actions/attest-build-provenance@v4
+              with:
+                  subject-path: release/*
