@@ -60,10 +60,15 @@ func (s *secretTool) run(timeout time.Duration, stdin []byte, args ...string) ([
 	if msg := strings.TrimSpace(stderr.String()); msg != "" {
 		return nil, fmt.Errorf("secret-tool %s: %s", args[0], msg)
 	}
-	if _, ok := errors.AsType[*exec.ExitError](err); err != nil && !ok {
-		return nil, err
+	// secret-tool exits 1 without output for lookups that match nothing. Clear
+	// exits 0 when nothing matches, so every other failure is real.
+	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok &&
+		args[0] == "lookup" && exitErr.ExitCode() == 1 && stdout.Len() == 0 {
+		return nil, nil
 	}
-	// secret-tool exits 1 without output for lookups that match nothing.
+	if err != nil {
+		return nil, fmt.Errorf("secret-tool %s: %w", args[0], err)
+	}
 	return stdout.Bytes(), nil
 }
 
