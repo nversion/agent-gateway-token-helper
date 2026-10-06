@@ -54,14 +54,16 @@ jobs:
                   (cd build && sha256sum agw-token-*) > "$RUNNER_TEMP/SHA256SUMS-rebuilt"
                   cat "$RUNNER_TEMP/SHA256SUMS-rebuilt"
             # Users compare their own builds against SHA256SUMS-unsigned, so its Linux and
-            # Windows lines must be exactly the rebuilt ones.
+            # Windows lines must be exactly the rebuilt ones: none missing, extra or
+            # duplicated. macOS lines are not reproducible and are left out.
             - name: Check SHA256SUMS-unsigned against the rebuild
               shell: bash
               run: |
                   [[ -f release/SHA256SUMS-unsigned ]] || { echo "SHA256SUMS-unsigned missing" >&2; exit 1; }
-                  if bad="$(grep -E -- '-(linux|windows)-' release/SHA256SUMS-unsigned | grep -vxF -f "$RUNNER_TEMP/SHA256SUMS-rebuilt")"; then
-                      echo "SHA256SUMS-unsigned does not match the rebuild:" >&2
-                      echo "$bad" >&2
+                  LC_ALL=C sort "$RUNNER_TEMP/SHA256SUMS-rebuilt" >"$RUNNER_TEMP/SHA256SUMS-expected"
+                  awk '/-(linux|windows)-/' release/SHA256SUMS-unsigned | LC_ALL=C sort >"$RUNNER_TEMP/SHA256SUMS-release"
+                  if ! diff -u "$RUNNER_TEMP/SHA256SUMS-expected" "$RUNNER_TEMP/SHA256SUMS-release" >&2; then
+                      echo "SHA256SUMS-unsigned does not match the rebuild" >&2
                       exit 1
                   fi
             - name: Install msitools
