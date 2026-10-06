@@ -419,6 +419,11 @@ func TestKeyChangesWithConfig(t *testing.T) {
 	if a.Key() == b.Key() {
 		t.Error("auth params should change the key")
 	}
+	a.AuthParams = map[string]string{"audience": "a&resource=b"}
+	b.AuthParams = map[string]string{"audience": "a", "resource": "b"}
+	if a.Key() == b.Key() {
+		t.Error("auth param values containing & must not collide with separate params")
+	}
 }
 
 func writeFile(t *testing.T, path, content string) {

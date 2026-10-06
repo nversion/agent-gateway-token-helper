@@ -389,21 +389,22 @@ func isLoopback(host string) bool {
 // changes which token the provider would issue is part of it, so a config
 // change never returns a stale token.
 func (c *Config) Key() string {
-	params := make([]string, 0, len(c.AuthParams))
+	// url.Values escapes keys and values, so a value containing "&" or "="
+	// can't collide with a different set of params. Encode sorts by key.
+	params := url.Values{}
 	for k, v := range c.AuthParams {
 		if k == "prompt" {
 			// Only changes the login UI, not the token.
 			continue
 		}
-		params = append(params, k+"="+v)
+		params.Set(k, v)
 	}
-	slices.Sort(params)
 	scopes := slices.Sorted(slices.Values(c.Scopes))
 	sum := sha256.Sum256([]byte(strings.Join([]string{
 		c.Issuer,
 		c.ClientID,
 		strings.Join(scopes, " "),
-		strings.Join(params, "&"),
+		params.Encode(),
 	}, "\n")))
 	return hex.EncodeToString(sum[:16])
 }
