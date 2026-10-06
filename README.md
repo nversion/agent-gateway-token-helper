@@ -16,6 +16,25 @@ standard OIDC provider:
 
 ## Install
 
+Download a prebuilt binary from the
+[releases page](https://github.com/nversion/agent-gateway-token-helper/releases):
+
+| OS | Archive | Signing |
+|---|---|---|
+| macOS | `agw-token-<version>-darwin-<arch>.zip` | Developer ID signed and notarized by Apple |
+| Windows | `agw-token-<version>-windows-<arch>.zip` | Authenticode signed with Azure Artifact Signing |
+| Linux | `agw-token-<version>-linux-<arch>.tar.gz` | Not signed |
+
+Each archive contains `agw-token` plus `agw-token-google` and `agw-token-entra`, which
+default to those providers (see [Executable name](#executable-name)). The binaries are
+also attached individually, and `SHA256SUMS` lists checksums for every file:
+
+```sh
+shasum -a 256 --check --ignore-missing SHA256SUMS
+```
+
+Or build from source:
+
 ```sh
 go install github.com/nversion/agent-gateway-token-helper/cmd/agw-token@latest
 ```
@@ -220,7 +239,7 @@ Use `--redirect-port 8400+` to also try the next 99 ports.
 
 | OS | `--store auto` (default) |
 |---|---|
-| macOS | Login Keychain, generic password service `agw-token`, via Security.framework (cgo). An unsigned rebuilt binary triggers one "allow" prompt. |
+| macOS | Login Keychain, generic password service `agw-token`, via Security.framework (cgo). Release binaries are signed, so updates keep access. An unsigned or rebuilt binary triggers one "allow" prompt. |
 | Windows | Files in `%LOCALAPPDATA%\agw-token\tokens`, encrypted with DPAPI for the current user. |
 | Linux | Secret Service (GNOME Keyring, KWallet, KeePassXC) through `secret-tool`, with secrets passed on stdin. Falls back to a 0600 file in `~/.config/agw-token/tokens` when `secret-tool` is missing or no session bus is reachable (e.g. headless or SSH). |
 
