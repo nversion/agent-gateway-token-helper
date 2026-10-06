@@ -14,6 +14,89 @@ standard OIDC provider:
 - On success, stdout contains only the token. Messages go to stderr. A failure exits
   non-zero.
 
+## Usage
+
+The common case: Claude Code, Claude Desktop or Codex on macOS or Windows, sending model
+traffic to a gateway at `https://agw.example.com` that accepts Google or Entra ID tokens.
+The sections further down cover other providers, profiles and MCP servers.
+
+**1. Install.** On Windows, install the `.msi` from the
+[releases page](https://github.com/nversion/agent-gateway-token-helper/releases). It puts
+the executables in `C:\Program Files\Agent Gateway helper` and on the system `PATH`
+([details](#windows-installer)); open a new terminal afterwards. On macOS, unzip the
+`darwin` archive and move the binaries onto your `PATH`:
+
+```sh
+sudo mv agw-token agw-token-google agw-token-entra /usr/local/bin/
+```
+
+**2. Sign in once** in a terminal to check it works. A browser window opens, and the
+token is printed afterwards:
+
+```sh
+agw-token-google     # Google
+agw-token-entra      # Entra ID, any work or school account
+```
+
+`agw-token-google` and `agw-token-entra` need no flags, which is what the harnesses below
+rely on. Use whichever matches your gateway; the examples use `agw-token-google`. The
+full paths are:
+
+| | macOS | Windows |
+|---|---|---|
+| Google | `/usr/local/bin/agw-token-google` | `C:\Program Files\Agent Gateway helper\agw-token-google.exe` |
+| Entra ID | `/usr/local/bin/agw-token-entra` | `C:\Program Files\Agent Gateway helper\agw-token-entra.exe` |
+
+**3. Point your harness at it.**
+
+*Claude Code:* add to `~/.claude/settings.json` (`%USERPROFILE%\.claude\settings.json`
+on Windows):
+
+```json
+{
+  "apiKeyHelper": "agw-token-google",
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://agw.example.com",
+    "CLAUDE_CODE_API_KEY_HELPER_TTL_MS": "240000"
+  }
+}
+```
+
+*Claude Desktop:* set these managed settings, with a `.reg` file on Windows or a
+configuration profile on macOS ([full examples](#claude-desktop-model-traffic-through-the-gateway)):
+
+| Key | Value |
+|---|---|
+| `inferenceProvider` | `gateway` |
+| `inferenceGatewayBaseUrl` | `https://agw.example.com` |
+| `inferenceCredentialKind` | `helper-script` |
+| `inferenceCredentialHelper` | full path from the table above |
+| `inferenceCredentialHelperWindows` | full Windows path (Windows only) |
+| `inferenceCredentialHelperTtlSec` | `240` |
+| `inferenceCredentialHelperTimeoutSec` | `300` |
+
+*Codex:* add to `~/.codex/config.toml` (`%USERPROFILE%\.codex\config.toml` on Windows):
+
+```toml
+model_provider = "gateway"
+
+[model_providers.gateway]
+name = "Agent Gateway"
+base_url = "https://agw.example.com/v1"
+wire_api = "responses"
+
+[model_providers.gateway.auth]
+command = "/usr/local/bin/agw-token-google"
+# Windows: command = 'C:\Program Files\Agent Gateway helper\agw-token-google.exe'
+timeout_ms = 300000
+refresh_interval_ms = 240000
+```
+
+The 4 minute caches stay under the 5 minutes of validity `agw-token` guarantees by
+default, so a harness never holds an expired token. The 5 minute timeouts leave time for
+a browser sign-in. To pin Entra ID to your tenant, or to cache tokens longer, see
+[Using it from a harness](#using-it-from-a-harness) and [Configuration](#configuration).
+
 ## Install
 
 Download a prebuilt binary from the
