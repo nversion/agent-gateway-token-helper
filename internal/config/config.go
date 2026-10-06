@@ -344,8 +344,8 @@ func parse(v map[string]string) (*Config, error) {
 	default:
 		return nil, fmt.Errorf("invalid redirect-host %q: want localhost, 127.0.0.1 or [::1]", c.RedirectHost)
 	}
-	if c.CallbackPath != "" && !strings.HasPrefix(c.CallbackPath, "/") {
-		return nil, fmt.Errorf("invalid callback-path %q: must start with /", c.CallbackPath)
+	if err := checkCallbackPath(c.CallbackPath); err != nil {
+		return nil, err
 	}
 	switch c.Store {
 	case "auto", "file":
@@ -358,6 +358,30 @@ func parse(v map[string]string) (*Config, error) {
 		return nil, fmt.Errorf("invalid output %q: want raw, json, headers or decoded", c.Output)
 	}
 	return c, nil
+}
+
+// checkCallbackPath accepts an absolute URL path that the browser sends back
+// unchanged: nothing needing escaping, no percent-encoding, no query or
+// fragment, and no dot segments (browsers resolve those away). Empty means no
+// path.
+func checkCallbackPath(p string) error {
+	if p == "" {
+		return nil
+	}
+	u, err := url.Parse(p)
+	ok := err == nil && strings.HasPrefix(p, "/") && !strings.HasPrefix(p, "//") &&
+		u.Path == p && u.EscapedPath() == p && u.RawQuery == "" && u.Fragment == "" && !u.ForceQuery
+	if ok {
+		for seg := range strings.SplitSeq(p, "/") {
+			if seg == "." || seg == ".." {
+				ok = false
+			}
+		}
+	}
+	if !ok {
+		return fmt.Errorf("invalid callback-path %q: want a plain URL path such as /callback", p)
+	}
+	return nil
 }
 
 // CheckIssuerURL requires https, except for loopback hosts so a local test

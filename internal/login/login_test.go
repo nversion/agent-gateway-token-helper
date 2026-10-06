@@ -74,6 +74,18 @@ func TestRunNoCallbackPath(t *testing.T) {
 	}
 }
 
+// A path that ServeMux would parse as a pattern must be matched literally,
+// not panic.
+func TestRunPatternLikeCallbackPath(t *testing.T) {
+	p := oidctest.Start(t, oidctest.Options{})
+	var out bytes.Buffer
+	prm := params(p, &out)
+	prm.CallbackPath = "/{x}"
+	if _, err := Run(context.Background(), prm); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+}
+
 func TestRunProviderError(t *testing.T) {
 	p := oidctest.Start(t, oidctest.Options{})
 	var out bytes.Buffer

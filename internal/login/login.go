@@ -95,8 +95,9 @@ func Run(ctx context.Context, p Params) (*Result, error) {
 	if path == "" {
 		path = "/"
 	}
-	mux := http.NewServeMux()
-	mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+	// Match the path literally rather than via ServeMux, which would treat
+	// it as a routing pattern.
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != path {
 			http.NotFound(w, r)
 			return
@@ -116,7 +117,7 @@ func Run(ctx context.Context, p Params) (*Result, error) {
 		writePage(w, cb.err)
 		once.Do(func() { results <- cb })
 	})
-	srv := &http.Server{Handler: mux, ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Handler: handler, ReadHeaderTimeout: 10 * time.Second}
 	for _, l := range listeners {
 		go func() { _ = srv.Serve(l) }()
 	}

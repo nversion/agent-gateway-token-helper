@@ -395,6 +395,14 @@ func TestValidationErrors(t *testing.T) {
 		{"bad host", map[string]string{"redirect-host": "0.0.0.0"}, "redirect-host"},
 		{"bad params", map[string]string{"extra-auth-params": "novalue"}, "key=value"},
 		{"bad store", map[string]string{"store": "s3"}, "store"},
+		{"relative callback", map[string]string{"callback-path": "callback"}, "callback-path"},
+		{"pattern callback", map[string]string{"callback-path": "/{"}, "callback-path"},
+		{"host callback", map[string]string{"callback-path": "//evil.example/cb"}, "callback-path"},
+		{"query callback", map[string]string{"callback-path": "/cb?x=1"}, "callback-path"},
+		{"fragment callback", map[string]string{"callback-path": "/cb#x"}, "callback-path"},
+		{"space callback", map[string]string{"callback-path": "/a b"}, "callback-path"},
+		{"escaped callback", map[string]string{"callback-path": "/a%2Fb"}, "callback-path"},
+		{"dot callback", map[string]string{"callback-path": "/a/../cb"}, "callback-path"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
