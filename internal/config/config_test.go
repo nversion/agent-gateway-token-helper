@@ -335,6 +335,16 @@ func TestExtraAuthParamsMergeWithPreset(t *testing.T) {
 	}
 }
 
+func TestExtraAuthParamsRejectManaged(t *testing.T) {
+	home := t.TempDir()
+	for _, kv := range []string{"state=fixed", "nonce=x", "code_challenge_method=plain", "redirect_uri=http://evil", "scope="} {
+		_, err := load(t, home, map[string]string{"provider": "google", "extra-auth-params": "hd=example.com," + kv}, nil)
+		if err == nil || !strings.Contains(err.Error(), "cannot set") {
+			t.Errorf("%s: err %v, want cannot set", kv, err)
+		}
+	}
+}
+
 func TestNoAccountPicker(t *testing.T) {
 	home := t.TempDir()
 	tests := []struct {

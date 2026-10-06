@@ -518,6 +518,14 @@ func splitList(s string) []string {
 	return strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ' ' })
 }
 
+// managedParams are the authorization request parameters the login sets
+// itself. Overriding them would break the flow (a fixed state no longer
+// matches the callback) or weaken it (a different PKCE method or nonce).
+var managedParams = []string{
+	"state", "nonce", "code_challenge", "code_challenge_method",
+	"redirect_uri", "client_id", "response_type", "scope",
+}
+
 func parseParams(s string) (map[string]string, error) {
 	out := map[string]string{}
 	for kv := range strings.SplitSeq(s, ",") {
@@ -528,6 +536,9 @@ func parseParams(s string) (map[string]string, error) {
 		k, v, ok := strings.Cut(kv, "=")
 		if !ok || k == "" {
 			return nil, fmt.Errorf("invalid extra-auth-params entry %q: want key=value", kv)
+		}
+		if slices.Contains(managedParams, k) {
+			return nil, fmt.Errorf("extra-auth-params cannot set %q: agw-token sets it itself", k)
 		}
 		// Later entries win; an empty value removes the key, which is how a
 		// preset parameter is turned off (prompt=).

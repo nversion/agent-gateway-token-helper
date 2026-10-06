@@ -370,7 +370,10 @@ CI builds one binary with no default and one for each preset, for example
 
 Any preset value can be overridden. `extra-auth-params` is the exception: your
 parameters are added to the preset's, with yours winning on conflicts, and an empty
-value removes a preset parameter (`--extra-auth-params prompt=`). For example, to
+value removes a preset parameter (`--extra-auth-params prompt=`). Parameters the
+login sets itself (`state`, `nonce`, `code_challenge`, `code_challenge_method`,
+`redirect_uri`, `client_id`, `response_type`, `scope`) are rejected; use `--scopes`
+for scopes. For example, to
 limit Google's account picker to your Workspace domain:
 
 ```sh
