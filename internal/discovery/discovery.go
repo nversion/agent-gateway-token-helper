@@ -126,22 +126,50 @@ func sameIssuer(configured, discovered string) bool {
 	return discovered == configured || entraAlias(configured, discovered)
 }
 
+// entraAuthorities are the Microsoft Entra ID hosts (public and sovereign
+// clouds) whose issuers may differ from the configured one; see entraAlias.
+var entraAuthorities = []string{
+	"https://login.microsoftonline.com",
+	"https://login.microsoftonline.us",
+	"https://login.chinacloudapi.cn",
+	"https://login.partner.microsoftonline.cn",
+}
+
+// entraMultiTenant are the tenant aliases whose discovery document reports
+// the {tenantid} template rather than a tenant GUID.
+var entraMultiTenant = []string{"common", "organizations"}
+
 // entraAlias reports whether discovered is what Microsoft Entra ID reports
-// for the configured issuer: a tenant alias ("contoso.com", "consumers")
-// resolves to the tenant GUID, and the multi-tenant endpoints ("common",
-// "organizations") report the {tenantid} template. Both must have the form
-// "<base>/<tenant>/v2.0" with the same base, and a configured tenant GUID
+// for the configured issuer: the multi-tenant endpoints ("common",
+// "organizations") report the {tenantid} template, and any other tenant
+// alias ("contoso.com", "consumers") resolves to the tenant GUID. Both must
+// have the form "<authority>/<tenant>/v2.0" with the same authority, which
+// must be an Entra ID host or, for the local fake provider in
+// internal/oidctest, a plain-http loopback host. A configured tenant GUID
 // must match exactly.
 func entraAlias(configured, discovered string) bool {
 	cBase, cTenant, ok := splitEntraIssuer(configured)
-	if !ok || isGUID(cTenant) {
+	if !ok || !isEntraAuthority(cBase) || isGUID(cTenant) || cTenant == idtoken.TenantIDPlaceholder {
 		return false
 	}
 	dBase, dTenant, ok := splitEntraIssuer(discovered)
 	if !ok || dBase != cBase {
 		return false
 	}
-	return dTenant == idtoken.TenantIDPlaceholder || isGUID(dTenant)
+	if slices.Contains(entraMultiTenant, strings.ToLower(cTenant)) {
+		return dTenant == idtoken.TenantIDPlaceholder
+	}
+	return isGUID(dTenant)
+}
+
+// isEntraAuthority reports whether base is an Entra ID authority or the
+// origin of a local test provider.
+func isEntraAuthority(base string) bool {
+	if slices.Contains(entraAuthorities, base) {
+		return true
+	}
+	u, err := url.Parse(base)
+	return err == nil && u.Scheme == "http" && u.Path == "" && config.CheckIssuerURL(base) == nil
 }
 
 // splitEntraIssuer splits "<scheme>://<host>[/path]/<tenant>/v2.0" into its

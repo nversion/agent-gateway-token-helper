@@ -133,6 +133,23 @@ func TestSameIssuer(t *testing.T) {
 		{ms + "/contoso.com/v2.0", "http://login.microsoftonline.com/" + guid + "/v2.0", false},
 		{ms + "/contoso.com", ms + "/" + guid, false},
 		{"https://idp.example/a/realms/work/v2.0", "https://idp.example/b/realms/" + guid + "/v2.0", false},
+		// Only multi-tenant aliases resolve to the template.
+		{ms + "/contoso.com/v2.0", ms + "/{tenantid}/v2.0", false},
+		{ms + "/consumers/v2.0", ms + "/{tenantid}/v2.0", false},
+		{ms + "/organizations/v2.0", ms + "/" + guid + "/v2.0", false},
+		{ms + "/{tenantid}/v2.0", ms + "/" + guid + "/v2.0", false},
+		// Sovereign clouds are Entra authorities too.
+		{"https://login.microsoftonline.us/contoso.us/v2.0", "https://login.microsoftonline.us/" + guid + "/v2.0", true},
+		// Generic providers need an exact match, even with Entra-like paths.
+		{"https://idp.example/work/v2.0", "https://idp.example/{tenantid}/v2.0", false},
+		{"https://idp.example/organizations/v2.0", "https://idp.example/{tenantid}/v2.0", false},
+		{"https://idp.example/work/v2.0", "https://idp.example/" + guid + "/v2.0", false},
+		{"https://login.microsoftonline.com.evil.example/common/v2.0", "https://login.microsoftonline.com.evil.example/{tenantid}/v2.0", false},
+		// A loopback http origin stands in for Entra in local tests.
+		{"http://127.0.0.1:8080/organizations/v2.0", "http://127.0.0.1:8080/{tenantid}/v2.0", true},
+		{"http://localhost:8080/contoso.com/v2.0", "http://localhost:8080/" + guid + "/v2.0", true},
+		{"http://127.0.0.1:8080/x/organizations/v2.0", "http://127.0.0.1:8080/x/{tenantid}/v2.0", false},
+		{"https://127.0.0.1:8080/organizations/v2.0", "https://127.0.0.1:8080/{tenantid}/v2.0", false},
 	}
 	for _, tt := range tests {
 		if got := sameIssuer(tt.configured, tt.discovered); got != tt.want {
