@@ -118,7 +118,7 @@ jobs:
             - name: Checkout
               uses: actions/checkout@v7
             - name: Install msitools
-              run: sudo apt-get update && sudo apt-get install -y msitools
+              run: sudo apt-get update && sudo apt-get install -y msitools wixl
             - name: Download binaries
               uses: actions/download-artifact@v4
               with:
