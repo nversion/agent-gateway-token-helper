@@ -166,6 +166,9 @@ go build -ldflags "-X main.defaultProvider=google" -o agw-token ./cmd/agw-token
 `agw-token version` shows the compiled-in provider. An unknown name makes every run fail
 with a configuration error.
 
+CI builds one binary with no default and one for each preset, for example
+`agw-token-darwin-arm64`, `agw-token-google-darwin-arm64` and `agw-token-entra-darwin-arm64`.
+
 ### Provider presets
 
 | | `google` | `entra` |
