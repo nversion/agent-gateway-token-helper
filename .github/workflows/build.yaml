@@ -103,6 +103,94 @@ jobs:
                   name: agw-token-${{ matrix.goos }}-${{ matrix.goarch }}
                   path: build/
 
+    # Windows Installer packages from the CI binaries, to catch packaging errors on every
+    # change. Releases build theirs in scripts/release-sign.sh from the signed binaries.
+    msi:
+        needs: build
+        permissions:
+            contents: read
+        strategy:
+            fail-fast: false
+            matrix:
+                goarch: [amd64, arm64]
+        runs-on: ubuntu-26.04
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+            - name: Install msitools
+              run: sudo apt-get update && sudo apt-get install -y msitools
+            - name: Download binaries
+              uses: actions/download-artifact@v4
+              with:
+                  name: agw-token-windows-${{ matrix.goarch }}
+                  path: binaries
+            - name: Build MSI
+              shell: bash
+              env:
+                  VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '0.0.0' }}
+              run: |
+                  stage="$RUNNER_TEMP/stage"
+                  mkdir -p "$stage"
+                  for variant in "" -google -entra; do
+                      cp "binaries/agw-token$variant-windows-${{ matrix.goarch }}.exe" "$stage/agw-token$variant.exe"
+                  done
+                  cp LICENSE README.md "$stage/"
+                  scripts/build-msi.sh windows-${{ matrix.goarch }} "$VERSION" "$stage" msi/agw-token-windows-${{ matrix.goarch }}.msi
+            - name: Upload
+              uses: actions/upload-artifact@v4
+              with:
+                  name: agw-token-msi-windows-${{ matrix.goarch }}
+                  path: msi/
+
+    # Installs the amd64 package, runs agw-token from the install directory, then
+    # uninstalls it and checks that the files and the PATH entry are gone.
+    msi-install:
+        needs: msi
+        permissions:
+            contents: read
+        runs-on: windows-latest
+        steps:
+            - name: Download MSI
+              uses: actions/download-artifact@v4
+              with:
+                  name: agw-token-msi-windows-amd64
+                  path: msi
+            - name: Install, run and uninstall
+              shell: pwsh
+              run: |
+                  $ErrorActionPreference = 'Stop'
+                  $msi = (Resolve-Path msi\agw-token-windows-amd64.msi).Path
+                  $dir = 'C:\Program Files\Agent Gateway helper'
+                  function Invoke-Msiexec([string[]]$arguments) {
+                      $p = Start-Process msiexec.exe -ArgumentList $arguments -Wait -PassThru
+                      if ($p.ExitCode -ne 0) {
+                          Get-Content "$env:RUNNER_TEMP\msi.log" -ErrorAction SilentlyContinue | Select-Object -Last 50
+                          throw "msiexec $arguments exited with $($p.ExitCode)"
+                      }
+                  }
+                  function Get-MachinePath {
+                      [Environment]::GetEnvironmentVariable('Path', 'Machine') -split ';'
+                  }
+
+                  Invoke-Msiexec @('/i', "`"$msi`"", '/qn', '/l*v', "`"$env:RUNNER_TEMP\msi.log`"")
+                  foreach ($exe in 'agw-token.exe', 'agw-token-google.exe', 'agw-token-entra.exe') {
+                      if (-not (Test-Path "$dir\$exe")) { throw "$exe not installed" }
+                  }
+                  if ((Get-MachinePath) -notcontains "$dir\") { throw "$dir not on the machine PATH: $(Get-MachinePath)" }
+                  # A new session picks up the machine PATH; this one still has the old one.
+                  $env:Path = [Environment]::GetEnvironmentVariable('Path', 'Machine')
+                  $found = (Get-Command agw-token).Source
+                  if ($found -ne "$dir\agw-token.exe") { throw "agw-token resolves to $found" }
+                  agw-token version
+                  $v = agw-token-google version
+                  if ($v -notmatch 'default provider google') { throw "agw-token-google version printed: $v" }
+
+                  Invoke-Msiexec @('/x', "`"$msi`"", '/qn', '/l*v', "`"$env:RUNNER_TEMP\msi.log`"")
+                  if (Test-Path $dir) { throw "$dir still exists after uninstall" }
+                  if ((Get-MachinePath) | Where-Object { $_ -like '*Agent Gateway helper*' }) {
+                      throw "PATH entry left after uninstall: $(Get-MachinePath)"
+                  }
+
     # Builds Linux and Windows twice, from different directories with empty build
     # caches, and fails if any binary differs: the release sums depend on it.
     reproducible:

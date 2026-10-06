@@ -20,6 +20,8 @@
 # Linux binaries are packaged as they are. Output goes to dist/<tag>/release:
 #   agw-token-<version>-darwin-<arch>.zip    notarized, uploaded byte for byte as submitted
 #   agw-token-<version>-windows-<arch>.zip
+#   agw-token-<version>-windows-<arch>.msi   installs into C:\Program Files\Agent Gateway helper,
+#                                            built from the signed executables, then signed
 #   agw-token-<version>-linux-<arch>.tar.gz
 #   the individual signed binaries under their CI names, and SHA256SUMS.
 #   SHA256SUMS-unsigned, the sums of the binaries as CI built them, which is what
@@ -70,7 +72,9 @@ fi
 
 [[ -d "$DIST/unsigned" ]] || die "$DIST/unsigned not found, run scripts/release-download.sh $TAG first"
 
-need shasum zip tar ditto go
+# msitools builds the Windows Installer packages (scripts/build-msi.sh) and extracts
+# them again to check the executables inside.
+need shasum zip tar ditto go wixl msibuild msiinfo msiextract
 
 # Check every prerequisite before signing anything.
 if [[ "$sign_windows" == 1 ]]; then
@@ -108,36 +112,48 @@ if [[ "$sign_windows" == 1 ]]; then
         --query accessToken --output tsv)" || die "az could not get a token, run: az login"
     export AZURE_ACCESS_TOKEN
 
-    exes=()
-    while read -r name; do exes+=("$signed/$name"); done < <(binaries_for windows)
+    # authenticode <description> <file>... signs Windows executables or installer
+    # packages; Windows shows the description in the UAC prompt. One
+    # invocation for all files keeps within the service's request quota. The token is
+    # read from the environment so it never shows up in the process list.
+    authenticode() {
+        local description="$1"
+        shift
+        "$java" -jar "$JSIGN_JAR" \
+            --storetype TRUSTEDSIGNING \
+            --keystore "$azure_endpoint" \
+            --storepass env:AZURE_ACCESS_TOKEN \
+            --alias "$azure_account/$azure_profile" \
+            --tsaurl http://timestamp.acs.microsoft.com \
+            --tsmode RFC3161 \
+            --alg SHA-256 \
+            --name "$description" \
+            --url https://github.com/nversion/agent-gateway-token-helper \
+            --replace \
+            "$@"
+    }
 
-    # One invocation for all files keeps within the service's request quota. The token
-    # is read from the environment so it never shows up in the process list.
-    info "Signing ${#exes[@]} Windows binaries"
-    "$java" -jar "$JSIGN_JAR" \
-        --storetype TRUSTEDSIGNING \
-        --keystore "$azure_endpoint" \
-        --storepass env:AZURE_ACCESS_TOKEN \
-        --alias "$azure_account/$azure_profile" \
-        --tsaurl http://timestamp.acs.microsoft.com \
-        --tsmode RFC3161 \
-        --alg SHA-256 \
-        --name agw-token \
-        --url https://github.com/nversion/agent-gateway-token-helper \
-        --replace \
-        "${exes[@]}"
-    unset AZURE_ACCESS_TOKEN
-
-    if command -v osslsigncode >/dev/null 2>&1; then
-        for exe in "${exes[@]}"; do
+    # verify_authenticode <file>... checks the signatures when osslsigncode is installed.
+    verify_authenticode() {
+        local file
+        if ! command -v osslsigncode >/dev/null 2>&1; then
+            info "osslsigncode not installed, skipping signature verification (brew install osslsigncode)"
+            return
+        fi
+        for file in "$@"; do
             # Artifact Signing chains to a Microsoft root that Windows trusts but the
             # OpenSSL bundle on macOS does not include, so pass it explicitly.
             step osslsigncode verify -CAfile "$MS_ROOT_CA" -TSA-CAfile "$MS_ROOT_CA" \
-                -in "$exe" >/dev/null
+                -in "$file" >/dev/null
         done
-    else
-        info "osslsigncode not installed, skipping signature verification (brew install osslsigncode)"
-    fi
+    }
+
+    exes=()
+    while read -r name; do exes+=("$signed/$name"); done < <(binaries_for windows)
+
+    info "Signing ${#exes[@]} Windows binaries"
+    authenticode agw-token "${exes[@]}"
+    verify_authenticode "${exes[@]}"
     # Signing must only have added a signature, or the release cannot be checked
     # against a reproducible build.
     step go run ./cmd/verify-build "$release/SHA256SUMS-unsigned" "${exes[@]}" >/dev/null
@@ -180,12 +196,44 @@ for platform in "${PLATFORMS[@]}"; do
         ;;
     windows-*)
         (cd "$dir" && zip -q -X -r "$ROOT/$release/$base.zip" .)
+        scripts/build-msi.sh "$platform" "$VERSION" "$dir" "$release/$base.msi" >/dev/null
         ;;
     darwin-*)
         ditto -c -k --norsrc --noextattr --noacl "$dir" "$release/$base.zip"
         ;;
     esac
     info "Packaged $base"
+done
+
+msis=()
+for platform in "${PLATFORMS[@]}"; do
+    if [[ "$platform" == windows-* ]]; then
+        msis+=("$release/agw-token-$VERSION-$platform.msi")
+    fi
+done
+if [[ "$sign_windows" == 1 ]]; then
+    info "Signing ${#msis[@]} Windows Installer packages"
+    authenticode "Agent Gateway helper" "${msis[@]}"
+    verify_authenticode "${msis[@]}"
+fi
+unset AZURE_ACCESS_TOKEN
+
+# The packages must hold exactly the executables in the zip, which verify-build traces
+# back to the reproducible build.
+for platform in "${PLATFORMS[@]}"; do
+    [[ "$platform" == windows-* ]] || continue
+    msi="$release/agw-token-$VERSION-$platform.msi"
+    extracted="$stage/msi-$platform"
+    msiextract -C "$extracted" "$msi" >/dev/null
+    contents=()
+    while IFS= read -r -d '' f; do contents+=("$f"); done < <(find "$extracted" -name '*.exe' -print0)
+    [[ ${#contents[@]} -eq ${#VARIANTS[@]} ]] ||
+        die "$(basename "$msi") holds ${#contents[@]} executables, expected ${#VARIANTS[@]}"
+    for f in "${contents[@]}"; do
+        cmp -s "$f" "$stage/$platform/$(basename "$f")" ||
+            die "$(basename "$msi"): $(basename "$f") differs from the packaged executable"
+    done
+    step go run ./cmd/verify-build "$release/SHA256SUMS-unsigned" "${contents[@]}" >/dev/null
 done
 
 if [[ "$sign_macos" == 1 ]]; then

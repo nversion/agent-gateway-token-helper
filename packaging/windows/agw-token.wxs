@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Windows Installer package for agw-token, built by scripts/build-msi.sh with wixl
+  (msitools), which reads the WiX 3 schema.
+
+  Installs the three agw-token executables per machine into
+  C:\Program Files\Agent Gateway helper and appends that directory to the system PATH.
+  Tokens and user config stay per user, in %LOCALAPPDATA% and %APPDATA%.
+
+  Variables (passed with -D):
+    Version    numeric product version, a.b.c
+    SourceDir  directory holding agw-token.exe, agw-token-google.exe,
+               agw-token-entra.exe, LICENSE and README.md
+
+  The UpgradeCode must never change: it is what lets a newer MSI replace an installed
+  one, and what package managers identify the product by.
+-->
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+  <Product Id="*"
+           Name="Agent Gateway helper"
+           Manufacturer="nversion"
+           Language="1033"
+           Version="$(var.Version)"
+           UpgradeCode="78F64FB0-A860-47AC-84E9-AE7884D5B1D9">
+    <Package InstallerVersion="500"
+             Compressed="yes"
+             InstallScope="perMachine"
+             Description="Agent Gateway helper $(var.Version)"
+             Comments="Fetches OIDC ID tokens for the Agent Gateway" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Agent Gateway helper is already installed." />
+    <Media Id="1" Cabinet="agwtoken.cab" EmbedCab="yes" />
+
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/nversion/agent-gateway-token-helper" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+
+    <Directory Id="TARGETDIR" Name="SourceDir">
+      <Directory Id="ProgramFiles64Folder">
+        <Directory Id="INSTALLDIR" Name="Agent Gateway helper">
+          <Component Id="AgwToken" Guid="*">
+            <File Id="AgwTokenExe" Name="agw-token.exe" Source="$(var.SourceDir)/agw-token.exe" KeyPath="yes" />
+          </Component>
+          <Component Id="AgwTokenGoogle" Guid="*">
+            <File Id="AgwTokenGoogleExe" Name="agw-token-google.exe" Source="$(var.SourceDir)/agw-token-google.exe" KeyPath="yes" />
+          </Component>
+          <Component Id="AgwTokenEntra" Guid="*">
+            <File Id="AgwTokenEntraExe" Name="agw-token-entra.exe" Source="$(var.SourceDir)/agw-token-entra.exe" KeyPath="yes" />
+          </Component>
+          <Component Id="Docs" Guid="*">
+            <File Id="License" Name="LICENSE" Source="$(var.SourceDir)/LICENSE" KeyPath="yes" />
+            <File Id="Readme" Name="README.md" Source="$(var.SourceDir)/README.md" />
+          </Component>
+          <Component Id="Path" Guid="C0E874C3-5D48-49EF-9D03-F7B49E926049">
+            <CreateFolder />
+            <Environment Id="PathEntry" Name="PATH" Value="[INSTALLDIR]" Action="set" Part="last" System="yes" Permanent="no" />
+          </Component>
+        </Directory>
+      </Directory>
+    </Directory>
+
+    <Feature Id="Main" Level="1">
+      <ComponentRef Id="AgwToken" />
+      <ComponentRef Id="AgwTokenGoogle" />
+      <ComponentRef Id="AgwTokenEntra" />
+      <ComponentRef Id="Docs" />
+      <ComponentRef Id="Path" />
+    </Feature>
+  </Product>
+</Wix>

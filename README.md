@@ -22,7 +22,7 @@ Download a prebuilt binary from the
 | OS | Archive | Signing |
 |---|---|---|
 | macOS | `agw-token-<version>-darwin-<arch>.zip` | Developer ID signed and notarized by Apple |
-| Windows | `agw-token-<version>-windows-<arch>.zip` | Authenticode signed with Azure Artifact Signing |
+| Windows | `agw-token-<version>-windows-<arch>.msi` installer, or `.zip` | Authenticode signed with Azure Artifact Signing |
 | Linux | `agw-token-<version>-linux-<arch>.tar.gz` | Not signed |
 
 Each archive contains `agw-token` plus `agw-token-google` and `agw-token-entra`, which
@@ -32,6 +32,24 @@ also attached individually, and `SHA256SUMS` lists checksums for every file:
 ```sh
 shasum -a 256 --check --ignore-missing SHA256SUMS
 ```
+
+### Windows installer
+
+The `.msi` installs all three executables for every user of the machine, into
+`C:\Program Files\Agent Gateway helper`, and adds that directory to the system `PATH`.
+Installing needs administrator rights once; tokens and config stay per user. Open a new
+terminal afterwards to pick up the `PATH` change. Installing a newer `.msi` replaces the
+old version, and it is removed again under Settings > Apps as "Agent Gateway helper".
+For unattended installs, e.g. from Intune:
+
+```bat
+msiexec /i agw-token-1.2.3-windows-amd64.msi /qn
+msiexec /x agw-token-1.2.3-windows-amd64.msi /qn
+```
+
+An administrator can put an `agw-token.json` in the install directory to configure every
+user of the machine. Its settings win over each user's own file (see
+[Configuration](#configuration)), and upgrades and uninstalls leave it in place.
 
 ### Verifying a release against the source
 
@@ -54,6 +72,17 @@ for single binaries or whole release archives:
 
 ```sh
 go run ./cmd/verify-build SHA256SUMS-unsigned agw-token-1.2.3-windows-amd64.zip
+```
+
+The `.msi` installers are not reproducible themselves, since they hold timestamps and a
+random product code, but the executables inside are the same signed files. Extract them
+with `msiextract` from msitools (`brew install msitools`, `apt install msitools`), or
+with `msiexec /a agw-token-1.2.3-windows-amd64.msi /qn TARGETDIR=C:\extract` on Windows,
+and check those:
+
+```sh
+msiextract -C msi agw-token-1.2.3-windows-amd64.msi
+go run ./cmd/verify-build SHA256SUMS-unsigned msi/*/*.exe
 ```
 
 macOS builds are not reproducible: they use cgo for the Keychain, and the C compiler and

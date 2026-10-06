@@ -39,13 +39,28 @@ jobs:
                   mkdir release
                   gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir release
                   ls -l release
+            - name: Install msitools
+              run: sudo apt-get update && sudo apt-get install -y msitools
+            # The Windows Installer packages are not reproducible themselves, so their
+            # executables are extracted and checked like the rest.
             - name: Check Linux and Windows files against the unsigned build
               shell: bash
               run: |
                   cd release
                   [[ -f SHA256SUMS-unsigned ]] || { echo "SHA256SUMS-unsigned missing" >&2; exit 1; }
                   shopt -s nullglob
-                  files=(*-linux-* *-windows-*)
+                  files=()
+                  for f in *-linux-* *-windows-*; do
+                      [[ "$f" == *.msi ]] || files+=("$f")
+                  done
+                  for msi in *-windows-*.msi; do
+                      dir="$RUNNER_TEMP/msi/${msi%.msi}"
+                      msiextract -C "$dir" "$msi" >/dev/null
+                      exes=()
+                      while IFS= read -r -d '' f; do exes+=("$f"); done < <(find "$dir" -name '*.exe' -print0)
+                      [[ ${#exes[@]} -gt 0 ]] || { echo "no executables in $msi" >&2; exit 1; }
+                      files+=("${exes[@]}")
+                  done
                   [[ ${#files[@]} -gt 0 ]] || { echo "no Linux or Windows files" >&2; exit 1; }
                   go run ../cmd/verify-build SHA256SUMS-unsigned "${files[@]}"
             - name: Attest

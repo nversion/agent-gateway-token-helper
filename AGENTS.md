@@ -41,6 +41,13 @@ reproducible (the `reproducible` CI job builds them twice and diffs): no cgo, no
 stamping, nothing time- or path-dependent in ldflags. macOS needs cgo and is not
 reproducible.
 
+The Windows Installer packages are built by `scripts/build-msi.sh` with `wixl` from
+msitools; the layout (install directory `C:\Program Files\Agent Gateway helper`, system
+PATH entry) is in `packaging/windows/agw-token.wxs`. Never change its `UpgradeCode`: it
+is how a newer MSI finds and replaces an installed one. CI's `msi` job builds both
+packages and `msi-install` installs and uninstalls one on Windows. MSIs are not
+reproducible, so their executables are extracted and checked with `cmd/verify-build`.
+
 ## Releasing
 
 Releases are signed by hand on a Mac, from the binaries CI builds for a `v*` tag:
@@ -53,7 +60,8 @@ Releases are signed by hand on a Mac, from the binaries CI builds for a `v*` tag
    --azure-endpoint ... --azure-account ... --azure-profile ...` - codesigns and
    notarizes the macOS binaries, signs the Windows ones with the vendored
    `tools/jsign-*.jar` (Azure Artifact Signing), and packages everything into
-   `dist/v1.2.3/release`. `--skip-macos` / `--skip-windows` leave one OS unsigned.
+   `dist/v1.2.3/release`. The Windows `.msi` installers are built from the signed
+   executables and then signed themselves. `--skip-macos` / `--skip-windows` leave one OS unsigned.
    Besides `SHA256SUMS` of the signed files it writes `SHA256SUMS-unsigned`, which users
    compare their own builds against, and checks with `cmd/verify-build` that signing
    only added a signature to the Windows binaries.
@@ -64,7 +72,7 @@ Releases are signed by hand on a Mac, from the binaries CI builds for a `v*` tag
    against `SHA256SUMS-unsigned` and attests every asset.
 
 Prerequisites: `gh auth login`, `az login` as a user with the Certificate Profile
-Signer role on the signing account, a Java runtime, the Developer ID Application
+Signer role on the signing account, a Java runtime, msitools (`brew install msitools`), the Developer ID Application
 certificate in the login keychain, and a notarytool profile from
 `xcrun notarytool store-credentials`.
 Run each script with `--help` for its flags.
