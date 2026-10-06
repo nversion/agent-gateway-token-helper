@@ -137,10 +137,12 @@ jobs:
                   done
                   cp LICENSE README.md "$stage/"
                   scripts/build-msi.sh windows-${{ matrix.goarch }} "$VERSION" "$stage" msi/agw-token-windows-${{ matrix.goarch }}.msi
+            # Not named agw-token-*: scripts/release-download.sh takes every artifact
+            # with that prefix as a release binary, and these MSIs are unsigned.
             - name: Upload
               uses: actions/upload-artifact@v4
               with:
-                  name: agw-token-msi-windows-${{ matrix.goarch }}
+                  name: msi-windows-${{ matrix.goarch }}
                   path: msi/
 
     # Installs the amd64 package, runs agw-token from the install directory, then
@@ -154,7 +156,7 @@ jobs:
             - name: Download MSI
               uses: actions/download-artifact@v4
               with:
-                  name: agw-token-msi-windows-amd64
+                  name: msi-windows-amd64
                   path: msi
             - name: Install, run and uninstall
               shell: pwsh
