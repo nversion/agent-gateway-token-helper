@@ -167,7 +167,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, src confi
 
 	switch cmd {
 	case "logout":
-		err = m.Logout()
+		err = m.Logout(ctx)
 	case "status":
 		return status(m, stdout, stderr)
 	default:

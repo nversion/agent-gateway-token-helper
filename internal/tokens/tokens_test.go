@@ -202,7 +202,7 @@ func TestForceLoginAndLogout(t *testing.T) {
 	if c := p.Counters(); c.Authorize != 2 {
 		t.Fatalf("%d logins, want 2", c.Authorize)
 	}
-	if err := m.Logout(); err != nil {
+	if err := m.Logout(ctx); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := m.Stored(); !errors.Is(err, store.ErrNotFound) {

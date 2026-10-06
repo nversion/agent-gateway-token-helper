@@ -50,14 +50,14 @@ func (m *Manager) logf(format string, args ...any) {
 	_, _ = fmt.Fprintf(m.Stderr, "agw-token: "+format+"\n", args...)
 }
 
-func (m *Manager) lock() (*lock.Lock, error) {
-	return lock.Acquire(filepath.Join(m.Config.Dirs.State, "locks", m.Config.Key()+".lock"))
+func (m *Manager) lock(ctx context.Context) (*lock.Lock, error) {
+	return lock.Acquire(ctx, filepath.Join(m.Config.Dirs.State, "locks", m.Config.Key()+".lock"))
 }
 
 // Token returns an ID token valid for at least Config.MinValid when the
 // provider allows it. forceLogin skips the store and refresh token.
 func (m *Manager) Token(ctx context.Context, forceLogin bool) (*store.Entry, error) {
-	l, err := m.lock()
+	l, err := m.lock(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -105,8 +105,8 @@ func (m *Manager) Stored() (*store.Entry, error) {
 }
 
 // Logout deletes the stored tokens.
-func (m *Manager) Logout() error {
-	l, err := m.lock()
+func (m *Manager) Logout(ctx context.Context) error {
+	l, err := m.lock(ctx)
 	if err != nil {
 		return err
 	}

@@ -1,14 +1,21 @@
 package lock
 
 import (
+	"errors"
 	"os"
 
 	"golang.org/x/sys/windows"
 )
 
-func lockFile(f *os.File) error {
+// tryLockFile takes the lock without waiting; it reports false if another
+// process holds it.
+func tryLockFile(f *os.File) (bool, error) {
 	var ol windows.Overlapped
-	return windows.LockFileEx(windows.Handle(f.Fd()), windows.LOCKFILE_EXCLUSIVE_LOCK, 0, 1, 0, &ol)
+	err := windows.LockFileEx(windows.Handle(f.Fd()), windows.LOCKFILE_EXCLUSIVE_LOCK|windows.LOCKFILE_FAIL_IMMEDIATELY, 0, 1, 0, &ol)
+	if errors.Is(err, windows.ERROR_LOCK_VIOLATION) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 func unlockFile(f *os.File) error {
