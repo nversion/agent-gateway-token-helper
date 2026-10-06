@@ -92,18 +92,33 @@ or `agw-token --output headers`. Calls are cheap when the stored token is still 
 taking a few milliseconds with no network access. Concurrent calls are serialized per
 profile, so parallel tool calls open at most one browser window.
 
+Some harnesses, such as Claude Desktop, run the command without arguments. Configure
+those without flags in any of these ways:
+[an `agw-token.json` next to the binary](#configuration), a
+[binary named after the profile or provider](#executable-name) such as
+`agw-token-google`, or a [build with a default provider](#build-time-default-provider).
+
 ## Configuration
 
-Settings can come from four places. The first one that sets a value wins:
+Settings can come from several places. The first one that sets a value wins:
 
 1. command line flags, e.g. `--client-id`
 2. environment variables: `AGW_` plus the flag name, e.g. `AGW_CLIENT_ID`, `AGW_PROFILE`
-3. a profile in `config.json` (`--profile`, default `default`)
-4. the `--provider` preset
+3. a profile in `agw-token.json` next to the executable
+4. a profile in `agw-token.json` in the user config directory
+5. the executable name: `agw-token-<name>` picks a profile or provider
+6. the provider compiled in at build time
+7. the provider preset
 
-`config.json` lives in the user config directory: `~/.config/agw-token/` on Linux,
+The profile is `--profile`, else `AGW_PROFILE`, else the executable name if a profile has
+that name, else `default`. When both `agw-token.json` files exist they are merged one
+setting at a time, and the file next to the executable wins. A named profile only has to
+exist in one of them. `agw-token status` lists the config files it read.
+
+The user config directory is `~/.config/agw-token/` on Linux,
 `~/Library/Application Support/agw-token/` on macOS and `%APPDATA%\agw-token\` on
-Windows. Example:
+Windows. The executable's directory is resolved through symlinks, so the file goes next
+to the real binary. Example:
 
 ```json
 {
@@ -119,7 +134,37 @@ Windows. Example:
 }
 ```
 
-Set `AGW_HOME` to keep config, cache and file-store tokens in a single directory.
+Set `AGW_HOME` to keep config, cache and file-store tokens in a single directory. It
+replaces the user config directory. The file next to the executable is still read.
+
+### Executable name
+
+Renaming or copying the binary to `agw-token-<name>` (`agw-token-<name>.exe` on Windows)
+works like `--profile <name>` if a profile called `<name>` exists. Otherwise it works like
+`--provider <name>` if `<name>` is a preset. On Unix a symlink also works, since the name
+comes from how the binary was invoked. Release artifact names like
+`agw-token-google-darwin-arm64` also work: if the full suffix matches nothing, the part
+before the first dash is tried. A name that matches nothing, such as
+`agw-token-linux-amd64`, is ignored.
+
+```sh
+cp agw-token agw-token-google      # Google preset, no flags needed
+cp agw-token agw-token-work        # the "work" profile from agw-token.json
+```
+
+A `provider` set in the selected profile, including the `default` profile, wins over the
+name.
+
+### Build-time default provider
+
+Build a binary that falls back to a preset when nothing else picks a provider:
+
+```sh
+go build -ldflags "-X main.defaultProvider=google" -o agw-token ./cmd/agw-token
+```
+
+`agw-token version` shows the compiled-in provider. An unknown name makes every run fail
+with a configuration error.
 
 ### Provider presets
 

@@ -30,7 +30,11 @@ import (
 	"github.com/nversion/agent-gateway-token-helper/internal/store"
 )
 
-var binary string
+var (
+	binary string
+	// binaryEntra is built with entra as the build-time default provider.
+	binaryEntra string
+)
 
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "agw-token-it-")
@@ -38,19 +42,44 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	binary = filepath.Join(dir, "agw-token")
-	if runtime.GOOS == "windows" {
-		binary += ".exe"
+	build := func(subdir string, args ...string) string {
+		out := filepath.Join(dir, subdir, "agw-token"+exeSuffix())
+		args = append(append([]string{"build", "-o", out}, args...), "github.com/nversion/agent-gateway-token-helper/cmd/agw-token")
+		cmd := exec.Command("go", args...)
+		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+		if err := cmd.Run(); err != nil {
+			fmt.Fprintln(os.Stderr, "building agw-token:", err)
+			os.Exit(1)
+		}
+		return out
 	}
-	build := exec.Command("go", "build", "-o", binary, "github.com/nversion/agent-gateway-token-helper/cmd/agw-token")
-	build.Stdout, build.Stderr = os.Stdout, os.Stderr
-	if err := build.Run(); err != nil {
-		fmt.Fprintln(os.Stderr, "building agw-token:", err)
-		os.Exit(1)
-	}
+	binary = build("plain")
+	binaryEntra = build("entra", "-ldflags", "-X main.defaultProvider=entra")
 	code := m.Run()
 	_ = os.RemoveAll(dir)
 	os.Exit(code)
+}
+
+func exeSuffix() string {
+	if runtime.GOOS == "windows" {
+		return ".exe"
+	}
+	return ""
+}
+
+// installAs copies the agw-token binary into a fresh directory under name,
+// returning its path.
+func installAs(t *testing.T, name string) string {
+	t.Helper()
+	data, err := os.ReadFile(binary)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), name+exeSuffix())
+	if err := os.WriteFile(path, data, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
 
 type result struct {
@@ -65,6 +94,8 @@ type cli struct {
 	t    *testing.T
 	home string
 	args []string
+	// bin overrides the binary to run.
+	bin string
 }
 
 func newCLI(t *testing.T, p *oidctest.Provider, extra ...string) *cli {
@@ -78,7 +109,11 @@ func (c *cli) start(cmdArgs ...string) func() result {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	args := append(cmdArgs, c.args...)
 	args = append(args, "--no-browser", "--store", "file", "--login-timeout", "20s")
-	cmd := exec.CommandContext(ctx, binary, args...)
+	bin := binary
+	if c.bin != "" {
+		bin = c.bin
+	}
+	cmd := exec.CommandContext(ctx, bin, args...)
 	cmd.Env = append(cleanEnv(), "AGW_HOME="+c.home)
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
@@ -430,6 +465,62 @@ func TestGooglePreset(t *testing.T) {
 	port, _ := strconv.Atoi(ru.Port())
 	if ru.Path != "/" || port < 8085 || port > 8184 {
 		t.Fatalf("redirect_uri %s, want http://localhost:<8085-8184>/ like gcloud", ru)
+	}
+}
+
+// statusProvider runs status and returns the provider it reports. Status
+// exits 1 when nobody is signed in, which is fine here.
+func (c *cli) statusProvider() string {
+	c.t.Helper()
+	r := c.run("status", "--output", "json")
+	var info struct {
+		Provider string `json:"provider"`
+	}
+	if err := json.Unmarshal([]byte(r.stdout), &info); err != nil {
+		c.t.Fatalf("status exited %d, stdout %q, stderr:\n%s", r.code, r.stdout, r.stderr)
+	}
+	return info.Provider
+}
+
+func TestProviderFromExecutableName(t *testing.T) {
+	bin := installAs(t, "agw-token-google")
+	c := &cli{t: t, home: t.TempDir(), bin: bin}
+	if got := c.statusProvider(); got != "google" {
+		t.Fatalf("provider %q, want google from the name", got)
+	}
+
+	// A profile named after the binary, next to it, wins over the preset.
+	writeConfig(t, filepath.Join(filepath.Dir(bin), config.FileName), `{"profiles": {"google": {"provider": "entra"}}}`)
+	if got := c.statusProvider(); got != "entra" {
+		t.Fatalf("provider %q, want entra from the profile", got)
+	}
+
+	// And the command line wins over both.
+	c.args = []string{"--provider", "generic", "--issuer", "https://idp.example", "--client-id", "x"}
+	if got := c.statusProvider(); got != "generic" {
+		t.Fatalf("provider %q, want generic from the flag", got)
+	}
+}
+
+func TestBuildDefaultProvider(t *testing.T) {
+	c := &cli{t: t, home: t.TempDir(), bin: binaryEntra}
+	if got := c.statusProvider(); got != "entra" {
+		t.Fatalf("provider %q, want the build-time entra", got)
+	}
+	c.args = []string{"--provider", "google"}
+	if got := c.statusProvider(); got != "google" {
+		t.Fatalf("provider %q, want google from the flag", got)
+	}
+	r := c.run("version")
+	if !strings.Contains(r.stdout, "default provider entra") {
+		t.Fatalf("version %q does not mention the default provider", r.stdout)
+	}
+}
+
+func writeConfig(t *testing.T, path, content string) {
+	t.Helper()
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
 	}
 }
 

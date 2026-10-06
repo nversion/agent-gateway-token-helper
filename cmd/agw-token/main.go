@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"runtime/debug"
 	"strings"
 	"text/tabwriter"
@@ -26,6 +27,11 @@ import (
 
 // version is set at build time with -ldflags "-X main.version=...".
 var version = ""
+
+// defaultProvider is the provider used when no flag, environment variable,
+// profile or executable name picks one. Set it at build time with
+// -ldflags "-X main.defaultProvider=google".
+var defaultProvider = ""
 
 var flagHelp = map[string]string{
 	"provider":          "provider preset: generic, google (gcloud's client) or entra (Azure CLI's client) (default generic)",
@@ -59,20 +65,43 @@ Commands:
   version  print the version
 
 Every flag can also be set with an AGW_* environment variable (AGW_CLIENT_ID
-for --client-id) or in a profile in config.json in the config directory.
-Precedence: flag, environment, profile, provider preset.
+for --client-id) or in a profile in agw-token.json, next to the executable or
+in the config directory. Naming the executable agw-token-<name> selects the
+profile <name>, or else the provider <name>, without flags.
+Precedence: flag, environment, profile (next to the executable, then config
+directory), executable name, built-in default provider, provider preset.
 
 Flags:
 `
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-	code := run(ctx, os.Args[1:], os.Stdout, os.Stderr, os.Getenv)
+	src := config.Sources{
+		Getenv:          os.Getenv,
+		DefaultProvider: defaultProvider,
+		ExeName:         filepath.Base(os.Args[0]),
+		ExeDir:          exeDir(),
+	}
+	code := run(ctx, os.Args[1:], os.Stdout, os.Stderr, src)
 	stop()
 	os.Exit(code)
 }
 
-func run(ctx context.Context, args []string, stdout, stderr io.Writer, getenv func(string) string) int {
+// exeDir returns the directory of the real executable, after symlinks, or ""
+// if it cannot be found.
+func exeDir() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	if resolved, err := filepath.EvalSymlinks(exe); err == nil {
+		exe = resolved
+	}
+	return filepath.Dir(exe)
+}
+
+// run executes the command line args. src supplies everything but the flags.
+func run(ctx context.Context, args []string, stdout, stderr io.Writer, src config.Sources) int {
 	cmd := "token"
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		cmd, args = args[0], args[1:]
@@ -80,7 +109,11 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, getenv fu
 	switch cmd {
 	case "token", "login", "logout", "status":
 	case "version":
-		_, _ = fmt.Fprintln(stdout, buildVersion())
+		v := buildVersion()
+		if src.DefaultProvider != "" {
+			v += " (default provider " + src.DefaultProvider + ")"
+		}
+		_, _ = fmt.Fprintln(stdout, v)
 		return 0
 	case "help":
 		args = []string{"-h"}
@@ -95,12 +128,16 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, getenv fu
 		_, _ = fmt.Fprint(stderr, usageText)
 		fs.PrintDefaults()
 	}
-	fs.String("profile", "", "profile in config.json (default \"default\")")
+	fs.String("profile", "", "profile in agw-token.json (default \"default\")")
 	for _, k := range config.Keys {
+		help := flagHelp[k]
+		if k == "provider" && src.DefaultProvider != "" {
+			help = strings.Replace(help, "(default generic)", "(default "+src.DefaultProvider+")", 1)
+		}
 		if k == "no-browser" || k == "no-account-picker" {
-			fs.Bool(k, false, flagHelp[k])
+			fs.Bool(k, false, help)
 		} else {
-			fs.String(k, "", flagHelp[k])
+			fs.String(k, "", help)
 		}
 	}
 	if err := fs.Parse(args); err != nil {
@@ -113,10 +150,10 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer, getenv fu
 		_, _ = fmt.Fprintf(stderr, "agw-token: unexpected argument %q\n", fs.Arg(0))
 		return 2
 	}
-	flags := map[string]string{}
-	fs.Visit(func(f *flag.Flag) { flags[f.Name] = f.Value.String() })
+	src.Flags = map[string]string{}
+	fs.Visit(func(f *flag.Flag) { src.Flags[f.Name] = f.Value.String() })
 
-	cfg, err := config.Load(config.Sources{Flags: flags, Getenv: getenv})
+	cfg, err := config.Load(src)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "agw-token: %v\n", err)
 		return 2
@@ -180,12 +217,13 @@ func status(m *tokens.Manager, stdout, stderr io.Writer) int {
 	}
 
 	info := map[string]any{
-		"profile":   cfg.Profile,
-		"provider":  cfg.Provider,
-		"issuer":    cfg.Issuer,
-		"client_id": cfg.ClientID,
-		"store":     m.Store.Name(),
-		"logged_in": e != nil,
+		"profile":      cfg.Profile,
+		"provider":     cfg.Provider,
+		"issuer":       cfg.Issuer,
+		"client_id":    cfg.ClientID,
+		"store":        m.Store.Name(),
+		"config_files": cfg.ConfigFiles,
+		"logged_in":    e != nil,
 	}
 	if e != nil {
 		info["subject"] = e.Subject
@@ -205,6 +243,11 @@ func status(m *tokens.Manager, stdout, stderr io.Writer) int {
 		row("Issuer", cfg.Issuer)
 		row("Client ID", cfg.ClientID)
 		row("Store", m.Store.Name())
+		if len(cfg.ConfigFiles) == 0 {
+			row("Config files", "none")
+		} else {
+			row("Config files", strings.Join(cfg.ConfigFiles, ", "))
+		}
 		if e == nil {
 			row("Logged in", "no")
 		} else {

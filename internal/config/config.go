@@ -24,6 +24,10 @@ import (
 // AppName names the per-user directories and the keychain service.
 const AppName = "agw-token"
 
+// FileName is the config file, read from the executable's directory and the
+// user config directory.
+const FileName = AppName + ".json"
+
 // Keys lists every setting, in the spelling used for flags and profiles. The
 // environment variable for a key is AGW_ plus the key upper-cased with dashes
 // replaced by underscores.
@@ -72,11 +76,14 @@ type Config struct {
 	Store        string
 	Output       string
 	Dirs         Dirs
+	// ConfigFiles lists the config files that were read, highest precedence
+	// first.
+	ConfigFiles []string
 }
 
 // Dirs are the per-user directories the helper uses.
 type Dirs struct {
-	// Config holds config.json.
+	// Config holds agw-token.json.
 	Config string
 	// Cache holds discovery documents.
 	Cache string
@@ -95,14 +102,27 @@ type Sources struct {
 	// explicit empty value still overrides lower layers.
 	Flags  map[string]string
 	Getenv func(string) string
+	// DefaultProvider is the provider compiled into the binary, used when
+	// nothing else picks one.
+	DefaultProvider string
+	// ExeName is the executable's file name; agw-token-<name> selects the
+	// profile or provider <name>.
+	ExeName string
+	// ExeDir is the executable's directory, searched for agw-token.json
+	// before the user config directory. Empty skips it.
+	ExeDir string
 }
 
-// Load resolves the configuration with precedence flag > env > profile >
-// preset > default.
+// Load resolves the configuration with precedence flag > env > profile (next
+// to the executable, then in the config directory) > executable name >
+// build-time default provider > preset > default.
 func Load(src Sources) (*Config, error) {
 	getenv := src.Getenv
 	if getenv == nil {
 		getenv = os.Getenv
+	}
+	if p := src.DefaultProvider; p != "" && Presets[p] == nil {
+		return nil, fmt.Errorf("unknown build-time default provider %q (known: %s)", p, knownProviders())
 	}
 
 	dirs, err := ResolveDirs(getenv)
@@ -110,16 +130,65 @@ func Load(src Sources) (*Config, error) {
 		return nil, err
 	}
 
+	var paths []string
+	if src.ExeDir != "" && src.ExeDir != dirs.Config {
+		paths = append(paths, filepath.Join(src.ExeDir, FileName))
+	}
+	paths = append(paths, filepath.Join(dirs.Config, FileName))
+	var files []*fileConfig
+	var read []string
+	for _, p := range paths {
+		fc, err := readConfigFile(p)
+		if err != nil {
+			return nil, err
+		}
+		if fc != nil {
+			files = append(files, fc)
+			read = append(read, p)
+		}
+	}
+	hasProfile := func(name string) bool {
+		return slices.ContainsFunc(files, func(fc *fileConfig) bool {
+			_, ok := fc.Profiles[name]
+			return ok
+		})
+	}
+
 	profile, explicit := src.Flags["profile"], true
 	if profile == "" {
 		profile = getenv("AGW_PROFILE")
 	}
+	// The executable name stands in for --profile or --provider, for
+	// harnesses that cannot pass arguments.
+	nameProvider := ""
+	if profile == "" {
+		for _, n := range exeNames(src.ExeName) {
+			if hasProfile(n) {
+				profile = n
+				break
+			}
+			if Presets[n] != nil {
+				nameProvider = n
+				break
+			}
+		}
+	}
 	if profile == "" {
 		profile, explicit = "default", false
 	}
-	profileValues, err := loadProfile(filepath.Join(dirs.Config, "config.json"), profile, explicit)
-	if err != nil {
-		return nil, err
+	if explicit && !hasProfile(profile) {
+		if len(read) == 0 {
+			return nil, fmt.Errorf("profile %q not found: %s does not exist", profile, strings.Join(paths, " or "))
+		}
+		return nil, fmt.Errorf("profile %q not found in %s", profile, strings.Join(read, " or "))
+	}
+	var profileValues []map[string]string
+	for i, fc := range files {
+		v, err := fc.profile(read[i], profile)
+		if err != nil {
+			return nil, err
+		}
+		profileValues = append(profileValues, v)
 	}
 
 	lookup := func(key string) (string, bool) {
@@ -129,17 +198,28 @@ func Load(src Sources) (*Config, error) {
 		if v := getenv(EnvName(key)); v != "" {
 			return v, true
 		}
-		v, ok := profileValues[key]
-		return v, ok
+		for _, pv := range profileValues {
+			if v, ok := pv[key]; ok {
+				return v, true
+			}
+		}
+		return "", false
 	}
 
 	provider, ok := lookup("provider")
 	if !ok || provider == "" {
-		provider = defaults["provider"]
+		switch {
+		case nameProvider != "":
+			provider = nameProvider
+		case src.DefaultProvider != "":
+			provider = src.DefaultProvider
+		default:
+			provider = defaults["provider"]
+		}
 	}
 	preset, ok := Presets[provider]
 	if !ok {
-		return nil, fmt.Errorf("unknown provider %q (known: %s)", provider, strings.Join(slices.Sorted(maps.Keys(Presets)), ", "))
+		return nil, fmt.Errorf("unknown provider %q (known: %s)", provider, knownProviders())
 	}
 
 	values := make(map[string]string, len(Keys))
@@ -165,7 +245,30 @@ func Load(src Sources) (*Config, error) {
 	}
 	c.Profile = profile
 	c.Dirs = dirs
+	c.ConfigFiles = read
 	return c, nil
+}
+
+func knownProviders() string {
+	return strings.Join(slices.Sorted(maps.Keys(Presets)), ", ")
+}
+
+// exeNames returns the profile or provider names an executable called
+// agw-token-<name> may stand for: <name> itself, then its first dash-separated
+// part, so the release build agw-token-google-darwin-arm64 means google.
+func exeNames(exe string) []string {
+	if ext := filepath.Ext(exe); strings.EqualFold(ext, ".exe") {
+		exe = strings.TrimSuffix(exe, ext)
+	}
+	name, ok := strings.CutPrefix(strings.ToLower(exe), AppName+"-")
+	if !ok || name == "" {
+		return nil
+	}
+	names := []string{name}
+	if first, _, ok := strings.Cut(name, "-"); ok && first != "" {
+		names = append(names, first)
+	}
+	return names
 }
 
 func parse(v map[string]string) (*Config, error) {
@@ -332,19 +435,17 @@ func ResolveDirs(getenv func(string) string) (Dirs, error) {
 	return d, nil
 }
 
-// fileConfig is the layout of config.json:
+// fileConfig is the layout of agw-token.json:
 //
 //	{"profiles": {"default": {"provider": "entra", "tenant": "contoso.com"}}}
 type fileConfig struct {
 	Profiles map[string]map[string]any `json:"profiles"`
 }
 
-func loadProfile(path, name string, explicit bool) (map[string]string, error) {
+// readConfigFile parses a config file, returning nil if it does not exist.
+func readConfigFile(path string) (*fileConfig, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, fs.ErrNotExist) {
-		if explicit {
-			return nil, fmt.Errorf("profile %q not found: %s does not exist", name, path)
-		}
 		return nil, nil
 	}
 	if err != nil {
@@ -354,11 +455,14 @@ func loadProfile(path, name string, explicit bool) (map[string]string, error) {
 	if err := json.Unmarshal(data, &fc); err != nil {
 		return nil, fmt.Errorf("parsing %s: %w", path, err)
 	}
+	return &fc, nil
+}
+
+// profile returns the named profile's settings in flag syntax, or nil if the
+// file has no such profile. path is only used in errors.
+func (fc *fileConfig) profile(path, name string) (map[string]string, error) {
 	raw, ok := fc.Profiles[name]
 	if !ok {
-		if explicit {
-			return nil, fmt.Errorf("profile %q not found in %s", name, path)
-		}
 		return nil, nil
 	}
 
