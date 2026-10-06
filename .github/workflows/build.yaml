@@ -60,8 +60,8 @@ jobs:
     build:
         permissions:
             contents: read
-            # Tag builds get a build provenance attestation; scripts/release-download.sh
-            # checks it before signing.
+            # Tag builds of a public repository get a build provenance attestation;
+            # scripts/release-download.sh checks it before signing.
             id-token: write
             attestations: write
         strategy:
@@ -92,8 +92,9 @@ jobs:
               env:
                   VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
               run: scripts/build.sh ${{ matrix.goos }} ${{ matrix.goarch }}
+            # Attestations on a private repository need a paid GitHub plan.
             - name: Attest
-              if: github.ref_type == 'tag'
+              if: github.ref_type == 'tag' && github.event.repository.visibility == 'public'
               uses: actions/attest-build-provenance@v4
               with:
                   subject-path: build/agw-token-*

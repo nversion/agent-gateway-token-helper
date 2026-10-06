@@ -63,7 +63,10 @@ jobs:
                   done
                   [[ ${#files[@]} -gt 0 ]] || { echo "no Linux or Windows files" >&2; exit 1; }
                   go run ../cmd/verify-build SHA256SUMS-unsigned "${files[@]}"
+            # Attestations on a private repository need a paid GitHub plan; the check
+            # above still runs.
             - name: Attest
+              if: github.event.repository.visibility == 'public'
               uses: actions/attest-build-provenance@v4
               with:
                   subject-path: release/*
