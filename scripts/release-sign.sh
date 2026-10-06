@@ -73,8 +73,14 @@ need shasum zip tar ditto
 # Check every prerequisite before signing anything.
 if [[ "$sign_windows" == 1 ]]; then
     need az
-    java -version >/dev/null 2>&1 ||
-        die "no Java runtime found, install one with: brew install --cask temurin"
+    # macOS ships a java stub that fails without a registered JDK, and Homebrew's
+    # openjdk is keg-only, so fall back to it explicitly.
+    java="java"
+    if ! java -version >/dev/null 2>&1; then
+        java="$(brew --prefix openjdk 2>/dev/null)/bin/java"
+        "$java" -version >/dev/null 2>&1 ||
+            die "no Java runtime found, install one with: brew install openjdk"
+    fi
     (cd tools && shasum -a 256 --check --status "$(basename "$JSIGN_JAR").sha256") ||
         die "$JSIGN_JAR does not match its checksum"
 fi
@@ -105,7 +111,7 @@ if [[ "$sign_windows" == 1 ]]; then
     # One invocation for all files keeps within the service's request quota. The token
     # is read from the environment so it never shows up in the process list.
     info "Signing ${#exes[@]} Windows binaries"
-    java -jar "$JSIGN_JAR" \
+    "$java" -jar "$JSIGN_JAR" \
         --storetype TRUSTEDSIGNING \
         --keystore "$azure_endpoint" \
         --storepass env:AZURE_ACCESS_TOKEN \
@@ -121,7 +127,10 @@ if [[ "$sign_windows" == 1 ]]; then
 
     if command -v osslsigncode >/dev/null 2>&1; then
         for exe in "${exes[@]}"; do
-            step osslsigncode verify -in "$exe" >/dev/null
+            # Artifact Signing chains to a Microsoft root that Windows trusts but the
+            # OpenSSL bundle on macOS does not include, so pass it explicitly.
+            step osslsigncode verify -CAfile "$MS_ROOT_CA" -TSA-CAfile "$MS_ROOT_CA" \
+                -in "$exe" >/dev/null
         done
     else
         info "osslsigncode not installed, skipping signature verification (brew install osslsigncode)"

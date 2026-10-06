@@ -5,6 +5,9 @@
 #   --publish          publish the release; without it the release stays a draft
 #   --allow-unsigned   upload even if macOS or Windows signing was skipped
 #   --force            replace assets on a release that is already published
+#   --only OSES        upload only these platforms, comma separated from linux, windows
+#                      and darwin, e.g. --only windows. The uploaded SHA256SUMS then
+#                      covers just those files; a later full upload replaces it.
 #
 # The release is created as a draft with generated notes if it does not exist yet.
 # Tags with a suffix such as v1.2.3-rc1 are marked as prereleases.
@@ -21,11 +24,13 @@ shift
 publish=0
 allow_unsigned=0
 force=0
+only=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
     --publish) publish=1; shift ;;
     --allow-unsigned) allow_unsigned=1; shift ;;
     --force) force=1; shift ;;
+    --only) only="${2:?}"; shift 2 ;;
     -h | --help) usage; exit 0 ;;
     *) die "unknown flag $1" ;;
     esac
@@ -45,9 +50,20 @@ if [[ -f "$DIST/notarized.sha256" ]]; then
         die "macOS zips changed after notarization"
 fi
 
+oses=(linux windows darwin)
+if [[ -n "$only" ]]; then
+    IFS=, read -r -a oses <<<"$only"
+    for os in "${oses[@]}"; do
+        [[ "$os" =~ ^(linux|windows|darwin)$ ]] || die "--only takes linux, windows or darwin, got $os"
+    done
+fi
+
 if [[ "$allow_unsigned" == 0 ]]; then
-    for os in macos windows; do
-        grep -qx "$os" "$DIST/signing.txt" 2>/dev/null ||
+    for os in "${oses[@]}"; do
+        signed_as="$os"
+        [[ "$os" == darwin ]] && signed_as=macos
+        [[ "$os" == linux ]] && continue
+        grep -qx "$signed_as" "$DIST/signing.txt" 2>/dev/null ||
             die "$os binaries were not signed; re-run release-sign.sh or pass --allow-unsigned"
     done
 fi
@@ -65,7 +81,23 @@ else
 fi
 
 assets=()
-while IFS= read -r -d '' f; do assets+=("$f"); done < <(find "$release" -maxdepth 1 -type f -print0 | sort -z)
+if [[ -z "$only" ]]; then
+    while IFS= read -r -d '' f; do assets+=("$f"); done < <(find "$release" -maxdepth 1 -type f -print0 | sort -z)
+else
+    # Matches both archives (agw-token-1.2.3-windows-amd64.zip) and binaries
+    # (agw-token-google-windows-amd64.exe).
+    partial="$DIST/partial"
+    rm -rf "$partial"
+    mkdir -p "$partial"
+    for os in "${oses[@]}"; do
+        while IFS= read -r -d '' f; do assets+=("$f"); done < <(find "$release" -maxdepth 1 -type f -name "*-$os-*" -print0 | sort -z)
+    done
+    [[ ${#assets[@]} -gt 0 ]] || die "no files for $only in $release"
+    for f in "${assets[@]}"; do
+        awk -v name="$(basename "$f")" '$2 == name' "$release/SHA256SUMS"
+    done >"$partial/SHA256SUMS"
+    assets+=("$partial/SHA256SUMS")
+fi
 info "Uploading ${#assets[@]} files"
 gh release upload "$TAG" "${assets[@]}" --clobber
 

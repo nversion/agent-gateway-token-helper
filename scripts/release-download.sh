@@ -33,13 +33,15 @@ conclusion="$(gh run view "$run_id" --repo "$repo" --json conclusion --jq .concl
 [[ "$conclusion" == "success" ]] || die "Build run $run_id concluded '$conclusion', not releasing it"
 
 out="$DIST/unsigned"
-rm -rf "$out"
-mkdir -p "$out"
-step gh run download "$run_id" --repo "$repo" --dir "$out" --pattern 'agw-token-*'
+download="$DIST/download"
+rm -rf "$out" "$download"
+mkdir -p "$out" "$download"
+step gh run download "$run_id" --repo "$repo" --dir "$download" --pattern 'agw-token-*'
 
-# gh puts each artifact in its own directory; flatten them.
-find "$out" -mindepth 2 -type f -exec mv {} "$out/" \;
-find "$out" -mindepth 1 -type d -empty -delete
+# gh puts each artifact in a directory named after it, which is also the name of the
+# plain binary inside, so move the files out into a separate directory.
+find "$download" -type f -exec mv {} "$out/" \;
+rm -rf "$download"
 
 missing=0
 for os in linux windows darwin; do

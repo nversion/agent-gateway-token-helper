@@ -22,6 +22,9 @@ VARIANTS=("" google entra)
 
 JSIGN_JAR="tools/jsign-7.5.jar"
 
+# Root of the Artifact Signing certificate and timestamp chains, for osslsigncode verify.
+MS_ROOT_CA="tools/microsoft-identity-verification-root-2020.pem"
+
 die() {
     echo "error: $*" >&2
     exit 1
