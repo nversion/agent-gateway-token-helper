@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/nversion/agent-gateway-token-helper/internal/config"
+	"github.com/nversion/agent-gateway-token-helper/internal/idtoken"
 )
 
 // CacheTTL is how long a fetched document is reused.
@@ -117,23 +118,69 @@ func (d *Document) validate(issuer string) error {
 }
 
 // sameIssuer reports whether the discovered issuer belongs to the configured
-// one. OIDC Discovery requires an exact match, but Microsoft Entra ID reports
-// a different issuer for tenant aliases ("contoso.com" resolves to the tenant
-// GUID) and a {tenantid} template for its multi-tenant endpoints. Accepting
-// the same scheme and host keeps those working while still catching a
-// document that names another provider; the ID token's iss is checked
-// against the discovered issuer later.
+// one. OIDC Discovery §4.3 requires an exact match; the only exception is
+// Microsoft Entra ID (see entraAlias). The ID token's iss is checked against
+// the discovered issuer later.
 func sameIssuer(configured, discovered string) bool {
 	discovered = strings.TrimRight(discovered, "/")
-	if discovered == configured {
-		return true
-	}
-	c, err1 := url.Parse(configured)
-	d, err2 := url.Parse(discovered)
-	if err1 != nil || err2 != nil {
+	return discovered == configured || entraAlias(configured, discovered)
+}
+
+// entraAlias reports whether discovered is what Microsoft Entra ID reports
+// for the configured issuer: a tenant alias ("contoso.com", "consumers")
+// resolves to the tenant GUID, and the multi-tenant endpoints ("common",
+// "organizations") report the {tenantid} template. Both must have the form
+// "<base>/<tenant>/v2.0" with the same base, and a configured tenant GUID
+// must match exactly.
+func entraAlias(configured, discovered string) bool {
+	cBase, cTenant, ok := splitEntraIssuer(configured)
+	if !ok || isGUID(cTenant) {
 		return false
 	}
-	return c.Scheme == d.Scheme && strings.EqualFold(c.Host, d.Host)
+	dBase, dTenant, ok := splitEntraIssuer(discovered)
+	if !ok || dBase != cBase {
+		return false
+	}
+	return dTenant == idtoken.TenantIDPlaceholder || isGUID(dTenant)
+}
+
+// splitEntraIssuer splits "<scheme>://<host>[/path]/<tenant>/v2.0" into its
+// base and tenant.
+func splitEntraIssuer(issuer string) (base, tenant string, ok bool) {
+	rest, ok := strings.CutSuffix(issuer, "/v2.0")
+	if !ok {
+		return "", "", false
+	}
+	i := strings.LastIndexByte(rest, '/')
+	if i < 0 {
+		return "", "", false
+	}
+	base, tenant = rest[:i], rest[i+1:]
+	u, err := url.Parse(base)
+	if err != nil || u.Scheme == "" || u.Host == "" || tenant == "" {
+		return "", "", false
+	}
+	return base, tenant, true
+}
+
+// isGUID reports whether s has the 8-4-4-4-12 hex form of a GUID.
+func isGUID(s string) bool {
+	if len(s) != 36 {
+		return false
+	}
+	for i, r := range s {
+		switch i {
+		case 8, 13, 18, 23:
+			if r != '-' {
+				return false
+			}
+		default:
+			if !strings.ContainsRune("0123456789abcdefABCDEF", r) {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func readCache(path, issuer string, now time.Time) *Document {

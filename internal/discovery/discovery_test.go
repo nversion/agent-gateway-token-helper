@@ -71,6 +71,7 @@ func TestValidation(t *testing.T) {
 		want   string
 	}{
 		{"other host issuer", func(_ string, d map[string]any) { d["issuer"] = "http://127.0.0.2:1" }, "does not match"},
+		{"other path issuer", func(base string, d map[string]any) { d["issuer"] = base + "/realms/other" }, "does not match"},
 		{"no pkce", func(_ string, d map[string]any) { d["code_challenge_methods_supported"] = []string{"plain"} }, "PKCE"},
 		{"no code flow", func(_ string, d map[string]any) { d["response_types_supported"] = []string{"id_token"} }, "authorization code"},
 		{"missing token endpoint", func(_ string, d map[string]any) { delete(d, "token_endpoint") }, "token_endpoint"},
@@ -103,5 +104,39 @@ func TestEntraTenantTemplateAccepted(t *testing.T) {
 	}
 	if !strings.HasSuffix(doc.Issuer, "/{tenantid}/v2.0") {
 		t.Fatalf("issuer = %q", doc.Issuer)
+	}
+}
+
+func TestSameIssuer(t *testing.T) {
+	const (
+		ms   = "https://login.microsoftonline.com"
+		guid = "72f988bf-86f1-41af-91ab-2d7cd011db47"
+	)
+	tests := []struct {
+		configured, discovered string
+		want                   bool
+	}{
+		{"https://idp.example/realms/work", "https://idp.example/realms/work", true},
+		{"https://idp.example/realms/work", "https://idp.example/realms/work/", true},
+		{"https://idp.example/realms/work", "https://idp.example/realms/other", false},
+		{"https://idp.example", "https://idp.example/realms/other", false},
+		{"https://idp.example/realms/work", "https://idp.example", false},
+		{ms + "/organizations/v2.0", ms + "/{tenantid}/v2.0", true},
+		{ms + "/common/v2.0", ms + "/{tenantid}/v2.0", true},
+		{ms + "/contoso.com/v2.0", ms + "/" + guid + "/v2.0", true},
+		// A tenant GUID is already canonical and must match exactly.
+		{ms + "/" + guid + "/v2.0", ms + "/00000000-0000-0000-0000-000000000000/v2.0", false},
+		{ms + "/" + guid + "/v2.0", ms + "/{tenantid}/v2.0", false},
+		// Only a GUID or the template is what an alias resolves to.
+		{ms + "/contoso.com/v2.0", ms + "/fabrikam.com/v2.0", false},
+		{ms + "/contoso.com/v2.0", "https://evil.example/" + guid + "/v2.0", false},
+		{ms + "/contoso.com/v2.0", "http://login.microsoftonline.com/" + guid + "/v2.0", false},
+		{ms + "/contoso.com", ms + "/" + guid, false},
+		{"https://idp.example/a/realms/work/v2.0", "https://idp.example/b/realms/" + guid + "/v2.0", false},
+	}
+	for _, tt := range tests {
+		if got := sameIssuer(tt.configured, tt.discovered); got != tt.want {
+			t.Errorf("sameIssuer(%q, %q) = %v, want %v", tt.configured, tt.discovered, got, tt.want)
+		}
 	}
 }
