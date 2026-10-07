@@ -236,12 +236,14 @@ func TestFirstRunThenCached(t *testing.T) {
 }
 
 func TestRefreshNearExpiry(t *testing.T) {
-	p := oidctest.Start(t, oidctest.Options{TokenTTL: time.Minute, RotateRefreshTokens: true})
-	c := newCLI(t, p, "--min-valid", "5m")
+	p := oidctest.Start(t, oidctest.Options{TokenTTL: 10 * time.Minute, RotateRefreshTokens: true})
+	c := newCLI(t, p)
 
-	first, _ := c.mustToken()
+	first, _ := c.mustToken("--min-valid", "5m")
 	firstRT := c.stored().RefreshToken
-	second, r := c.mustToken()
+	// The stored token is now too short-lived; the refreshed one is not.
+	p.SetTokenTTL(time.Hour)
+	second, r := c.mustToken("--min-valid", "15m")
 	if r.logins != 0 {
 		t.Fatalf("refresh run asked for a login:\n%s", r.stderr)
 	}
@@ -269,11 +271,12 @@ func TestRefreshFailureFallsBackToBrowser(t *testing.T) {
 		{"no id_token on refresh", func(p *oidctest.Provider) { p.SetOmitIDTokenOnRefresh(true) }},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			p := oidctest.Start(t, oidctest.Options{TokenTTL: time.Minute})
-			c := newCLI(t, p, "--min-valid", "5m")
-			c.mustToken()
+			p := oidctest.Start(t, oidctest.Options{TokenTTL: 10 * time.Minute})
+			c := newCLI(t, p)
+			c.mustToken("--min-valid", "5m")
 			tt.breakIt(p)
-			_, r := c.mustToken()
+			p.SetTokenTTL(time.Hour)
+			_, r := c.mustToken("--min-valid", "15m")
 			if r.logins != 1 || !strings.Contains(r.stderr, "signing in again") {
 				t.Fatalf("expected a browser login after the failed refresh; logins %d\n%s", r.logins, r.stderr)
 			}

@@ -64,6 +64,15 @@ func TestValidate(t *testing.T) {
 			c["iss"] = "https://login.microsoftonline.com/tid-2/v2.0"
 			c["tid"] = "tid-1"
 		}, expect: func(e *Expect) { e.Issuer = "https://login.microsoftonline.com/{tenantid}/v2.0" }, wantErr: "issuer"},
+		{name: "entra refresh changes tenant", mutate: func(c map[string]any) {
+			c["iss"] = "https://login.microsoftonline.com/tid-2/v2.0"
+			c["tid"] = "tid-2"
+		}, expect: func(e *Expect) {
+			e.Issuer = "https://login.microsoftonline.com/{tenantid}/v2.0"
+			e.Nonce = ""
+			e.Subject = "alice"
+			e.SignedInIssuer = "https://login.microsoftonline.com/tid-1/v2.0"
+		}, wantErr: "issuer"},
 		{name: "entra template without tid", expect: func(e *Expect) {
 			e.Issuer = "https://login.microsoftonline.com/{tenantid}/v2.0"
 		}, wantErr: "tid"},

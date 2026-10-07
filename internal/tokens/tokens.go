@@ -26,6 +26,10 @@ import (
 // ErrNoIDToken is returned when a token response has no id_token.
 var ErrNoIDToken = errors.New("token response has no id_token")
 
+// ErrTooShortLived is returned when even a fresh sign-in yields an ID token
+// that is valid for less than Config.MinValid.
+var ErrTooShortLived = errors.New("ID token is valid for less than min-valid")
+
 // Manager gets tokens for one configuration.
 type Manager struct {
 	Config *config.Config
@@ -54,8 +58,9 @@ func (m *Manager) lock(ctx context.Context) (*lock.Lock, error) {
 	return lock.Acquire(ctx, filepath.Join(m.Config.Dirs.State, "locks", m.Config.Key()+".lock"))
 }
 
-// Token returns an ID token valid for at least Config.MinValid when the
-// provider allows it. forceLogin skips the store and refresh token.
+// Token returns an ID token valid for at least Config.MinValid, or
+// ErrTooShortLived if the provider does not issue one that lives that long.
+// forceLogin skips the store and refresh token.
 func (m *Manager) Token(ctx context.Context, forceLogin bool) (*store.Entry, error) {
 	l, err := m.lock(ctx)
 	if err != nil {
@@ -70,16 +75,22 @@ func (m *Manager) Token(ctx context.Context, forceLogin bool) (*store.Entry, err
 	}
 
 	if !forceLogin && cached != nil {
-		if cached.Expiry.Sub(m.now()) > m.Config.MinValid {
+		if m.validEnough(cached) {
 			return cached, nil
 		}
 		if cached.RefreshToken != "" {
 			e, err := m.refresh(ctx, cached)
-			if err == nil {
+			switch {
+			case err != nil:
+				m.logf("refreshing the token failed, signing in again: %v", err)
+			case !m.validEnough(e):
+				// Keep it anyway: the provider may have rotated the refresh token.
+				m.save(key, e)
+				m.logf("the refreshed token %s, signing in again", m.describeExpiry(e))
+			default:
 				m.save(key, e)
 				return e, nil
 			}
-			m.logf("refreshing the token failed, signing in again: %v", err)
 		}
 	}
 
@@ -88,7 +99,25 @@ func (m *Manager) Token(ctx context.Context, forceLogin bool) (*store.Entry, err
 		return nil, err
 	}
 	m.save(key, e)
+	if !m.validEnough(e) {
+		return nil, fmt.Errorf("%w (%v): the token from signing in %s; lower min-valid or raise the token lifetime at the provider",
+			ErrTooShortLived, m.Config.MinValid, m.describeExpiry(e))
+	}
 	return e, nil
+}
+
+// validEnough reports whether e is valid for more than Config.MinValid. Unlike
+// ID token validation it allows no clock skew, so it also rejects expired tokens.
+func (m *Manager) validEnough(e *store.Entry) bool {
+	return e.Expiry.Sub(m.now()) > m.Config.MinValid
+}
+
+func (m *Manager) describeExpiry(e *store.Entry) string {
+	left := e.Expiry.Sub(m.now()).Round(time.Second)
+	if left <= 0 {
+		return fmt.Sprintf("expired %v ago", -left)
+	}
+	return fmt.Sprintf("is valid for only %v", left)
 }
 
 // save stores e. Failing to store is reported but not fatal: the caller still
@@ -161,10 +190,11 @@ func (m *Manager) refresh(ctx context.Context, cached *store.Entry) (*store.Entr
 		return nil, err
 	}
 	return m.entry(tok, idtoken.Expect{
-		Issuer:   doc.Issuer,
-		ClientID: m.Config.ClientID,
-		Subject:  cached.Subject,
-		Now:      m.now(),
+		Issuer:         doc.Issuer,
+		ClientID:       m.Config.ClientID,
+		Subject:        cached.Subject,
+		SignedInIssuer: cached.Issuer,
+		Now:            m.now(),
 	}, cached.RefreshToken)
 }
 

@@ -118,8 +118,13 @@ type Expect struct {
 	// Subject, when set, must equal the sub claim. It is set on refresh so a
 	// refreshed token can't switch identity.
 	Subject string
-	Now     time.Time
-	Leeway  time.Duration
+	// SignedInIssuer, when set, must equal the iss claim exactly. It is set
+	// on refresh to the issuer of the cached token: sub is only unique per
+	// issuer, and an issuer template would otherwise accept a token from
+	// another tenant.
+	SignedInIssuer string
+	Now            time.Time
+	Leeway         time.Duration
 }
 
 // Validate checks the claims against e.
@@ -163,6 +168,9 @@ func (c *Claims) Validate(e Expect) error {
 
 	if e.Nonce != "" && c.Nonce != e.Nonce {
 		return errors.New("ID token nonce does not match the authorization request")
+	}
+	if e.SignedInIssuer != "" && c.Issuer != e.SignedInIssuer {
+		return fmt.Errorf("refreshed ID token issuer %q does not match %q", c.Issuer, e.SignedInIssuer)
 	}
 	if e.Subject != "" && c.Subject != e.Subject {
 		return fmt.Errorf("refreshed ID token subject %q does not match %q", c.Subject, e.Subject)

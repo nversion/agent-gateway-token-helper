@@ -94,7 +94,9 @@ func TestLoginCacheRefresh(t *testing.T) {
 		t.Fatalf("expected cached token without provider requests; counters %+v -> %+v", before, p.Counters())
 	}
 
-	// Close to expiry: refreshed, rotated refresh token persisted.
+	// Close to expiry: refreshed, rotated refresh token persisted. The longer
+	// TTL keeps the refreshed token valid at the shifted clock.
+	p.SetTokenTTL(2 * time.Hour)
 	m.Now = func() time.Time { return first.Expiry.Add(-time.Minute) }
 	third, err := m.Token(ctx, false)
 	if err != nil {
@@ -130,6 +132,7 @@ func TestRefreshFallsBackToLogin(t *testing.T) {
 				t.Fatal(err)
 			}
 			tt.breakIt(p)
+			p.SetTokenTTL(2 * time.Hour)
 			m.Now = func() time.Time { return first.Expiry.Add(-time.Minute) }
 			if _, err := m.Token(context.Background(), false); err != nil {
 				t.Fatalf("Token: %v\n%s", err, stderr)
@@ -141,6 +144,56 @@ func TestRefreshFallsBackToLogin(t *testing.T) {
 				t.Fatalf("stderr does not explain the fallback:\n%s", stderr)
 			}
 		})
+	}
+}
+
+func TestShortLivedLoginFails(t *testing.T) {
+	tests := []struct {
+		name  string
+		setup func(*oidctest.Provider)
+		want  string
+	}{
+		{"30s left", func(p *oidctest.Provider) { p.SetTokenTTL(30 * time.Second) }, "valid for only"},
+		// Within the leeway ID token validation allows for clock skew.
+		{"expired a minute ago", func(p *oidctest.Provider) {
+			p.SetClaimOverrides(map[string]any{"exp": time.Now().Add(-time.Minute).Unix()})
+		}, "expired 1m"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := oidctest.Start(t, oidctest.Options{})
+			tt.setup(p)
+			m, _ := newManager(t, p, t.TempDir())
+			_, err := m.Token(context.Background(), false)
+			if !errors.Is(err, ErrTooShortLived) || !strings.Contains(err.Error(), tt.want) {
+				t.Fatalf("Token: %v, want ErrTooShortLived mentioning %q", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestShortLivedRefreshSignsInAgain(t *testing.T) {
+	p := oidctest.Start(t, oidctest.Options{RotateRefreshTokens: true})
+	m, stderr := newManager(t, p, t.TempDir())
+	first, err := m.Token(context.Background(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The refreshed token, like the stored one, has a minute left on the
+	// shifted clock, and so does the one from signing in again.
+	m.Now = func() time.Time { return first.Expiry.Add(-time.Minute) }
+	if _, err := m.Token(context.Background(), false); !errors.Is(err, ErrTooShortLived) {
+		t.Fatalf("Token: %v, want ErrTooShortLived", err)
+	}
+	if c := p.Counters(); c.Refresh != 1 || c.Authorize != 2 {
+		t.Fatalf("counters %+v, want 1 refresh and 2 authorizes", c)
+	}
+	if !strings.Contains(stderr.String(), "refreshed token is valid for only") {
+		t.Fatalf("stderr does not explain the fallback:\n%s", stderr)
+	}
+	// The new refresh token is kept for when min-valid is lowered.
+	if stored, err := m.Stored(); err != nil || stored.RefreshToken == first.RefreshToken {
+		t.Fatalf("stored %+v, %v; want the new refresh token", stored, err)
 	}
 }
 
@@ -220,6 +273,29 @@ func TestEntraTenantIssuer(t *testing.T) {
 	}
 	if want := p.BaseURL() + "/11111111-2222-3333-4444-555555555555/v2.0"; e.Issuer != want {
 		t.Fatalf("issuer %q, want %q", e.Issuer, want)
+	}
+}
+
+func TestRefreshRejectsTenantChange(t *testing.T) {
+	p := oidctest.Start(t, oidctest.Options{EntraTenantID: "11111111-2222-3333-4444-555555555555"})
+	m, stderr := newManager(t, p, t.TempDir())
+	m.Config.Issuer = strings.ReplaceAll(p.Issuer(), "{tenant}", "organizations")
+	first, err := m.Token(context.Background(), false)
+	if err != nil {
+		t.Fatalf("Token: %v\n%s", err, stderr)
+	}
+	// Same sub, different tenant: still matches the {tenantid} template.
+	p.SetClaimOverrides(map[string]any{
+		"iss": p.BaseURL() + "/66666666-7777-8888-9999-000000000000/v2.0",
+		"tid": "66666666-7777-8888-9999-000000000000",
+	})
+	m.Now = func() time.Time { return first.Expiry.Add(-time.Minute) }
+	_, err = m.Token(context.Background(), false)
+	if c := p.Counters(); c.Refresh != 1 || c.Authorize != 2 {
+		t.Fatalf("counters %+v, want 1 refresh and 2 authorizes (err %v)", c, err)
+	}
+	if !strings.Contains(stderr.String(), "refreshed ID token issuer") {
+		t.Fatalf("refresh was not rejected for its issuer:\n%s", stderr)
 	}
 }
 
