@@ -182,7 +182,7 @@ func Load(src Sources) (*Config, error) {
 		}
 		return nil, fmt.Errorf("profile %q not found in %s", profile, strings.Join(read, " or "))
 	}
-	var profileValues []map[string]string
+	var profileValues []profileValues
 	for i, fc := range files {
 		v, err := fc.profile(read[i], profile)
 		if err != nil {
@@ -191,22 +191,27 @@ func Load(src Sources) (*Config, error) {
 		profileValues = append(profileValues, v)
 	}
 
-	lookup := func(key string) (string, bool) {
+	// lookup returns the highest-precedence value for key. A profile may give
+	// extra-auth-params as a JSON object, which is returned as obj.
+	lookup := func(key string) (v string, obj map[string]string, ok bool) {
 		if v, ok := src.Flags[key]; ok {
-			return v, true
+			return v, nil, true
 		}
 		if v := getenv(EnvName(key)); v != "" {
-			return v, true
+			return v, nil, true
 		}
 		for _, pv := range profileValues {
-			if v, ok := pv[key]; ok {
-				return v, true
+			if v, ok := pv.values[key]; ok {
+				return v, nil, true
+			}
+			if key == "extra-auth-params" && pv.authParams != nil {
+				return "", pv.authParams, true
 			}
 		}
-		return "", false
+		return "", nil, false
 	}
 
-	provider, ok := lookup("provider")
+	provider, _, ok := lookup("provider")
 	if !ok || provider == "" {
 		switch {
 		case nameProvider != "":
@@ -224,13 +229,8 @@ func Load(src Sources) (*Config, error) {
 
 	values := make(map[string]string, len(Keys))
 	for _, k := range Keys {
-		if v, ok := lookup(k); ok {
+		if v, _, ok := lookup(k); ok {
 			values[k] = v
-			// Extra auth params add to the preset's instead of replacing
-			// them, so e.g. hd=example.com keeps Google's access_type.
-			if p := preset[k]; k == "extra-auth-params" && p != "" {
-				values[k] = p + "," + v
-			}
 		} else if v, ok := preset[k]; ok {
 			values[k] = v
 		} else {
@@ -239,7 +239,25 @@ func Load(src Sources) (*Config, error) {
 	}
 	values["provider"] = provider
 
-	c, err := parse(values)
+	// Extra auth params add to the preset's instead of replacing them, so
+	// e.g. hd=example.com keeps Google's access_type.
+	params := map[string]string{}
+	if err := addParams(params, preset["extra-auth-params"]); err != nil {
+		return nil, err
+	}
+	if v, obj, ok := lookup("extra-auth-params"); ok {
+		if obj != nil {
+			for _, k := range slices.Sorted(maps.Keys(obj)) {
+				if err := setParam(params, k, obj[k]); err != nil {
+					return nil, err
+				}
+			}
+		} else if err := addParams(params, v); err != nil {
+			return nil, err
+		}
+	}
+
+	c, err := parse(values, params)
 	if err != nil {
 		return nil, err
 	}
@@ -271,7 +289,7 @@ func exeNames(exe string) []string {
 	return names
 }
 
-func parse(v map[string]string) (*Config, error) {
+func parse(v map[string]string, params map[string]string) (*Config, error) {
 	c := &Config{
 		Provider:     v["provider"],
 		Tenant:       v["tenant"],
@@ -304,10 +322,6 @@ func parse(v map[string]string) (*Config, error) {
 		return nil, errors.New("--scopes must include openid")
 	}
 
-	params, err := parseParams(v["extra-auth-params"])
-	if err != nil {
-		return nil, err
-	}
 	c.AuthParams = params
 	noPicker, err := strconv.ParseBool(v["no-account-picker"])
 	if err != nil {
@@ -483,30 +497,52 @@ func readConfigFile(path string) (*fileConfig, error) {
 	return &fc, nil
 }
 
-// profile returns the named profile's settings in flag syntax, or nil if the
-// file has no such profile. path is only used in errors.
-func (fc *fileConfig) profile(path, name string) (map[string]string, error) {
-	raw, ok := fc.Profiles[name]
-	if !ok {
-		return nil, nil
-	}
+// profileValues are one profile's settings.
+type profileValues struct {
+	// values are the settings in flag syntax.
+	values map[string]string
+	// authParams is extra-auth-params when given as a JSON object. It is kept
+	// as a map because a value may itself contain commas, such as a claims
+	// parameter.
+	authParams map[string]string
+}
 
-	out := make(map[string]string, len(raw))
+// profile returns the named profile's settings, which are empty if the file
+// has no such profile. path is only used in errors.
+func (fc *fileConfig) profile(path, name string) (profileValues, error) {
+	raw := fc.Profiles[name]
+	out := profileValues{values: make(map[string]string, len(raw))}
 	for k, v := range raw {
 		if !slices.Contains(Keys, k) {
-			return nil, fmt.Errorf("%s: profile %q: unknown setting %q", path, name, k)
+			return profileValues{}, fmt.Errorf("%s: profile %q: unknown setting %q", path, name, k)
 		}
-		s, err := profileValue(v)
+		var err error
+		if obj, ok := v.(map[string]any); ok && k == "extra-auth-params" {
+			out.authParams, err = stringMap(obj)
+		} else {
+			out.values[k], err = profileValue(v)
+		}
 		if err != nil {
-			return nil, fmt.Errorf("%s: profile %q: %s: %w", path, name, k, err)
+			return profileValues{}, fmt.Errorf("%s: profile %q: %s: %w", path, name, k, err)
+		}
+	}
+	return out, nil
+}
+
+func stringMap(obj map[string]any) (map[string]string, error) {
+	out := make(map[string]string, len(obj))
+	for k, v := range obj {
+		s, ok := v.(string)
+		if !ok {
+			return nil, errors.New("objects may only contain string values")
 		}
 		out[k] = s
 	}
 	return out, nil
 }
 
-// profileValue flattens a JSON value to the flag syntax: arrays become
-// comma-separated lists and objects k=v pairs.
+// profileValue converts a JSON value to the flag syntax: arrays become
+// comma-separated lists.
 func profileValue(v any) (string, error) {
 	switch v := v.(type) {
 	case string:
@@ -524,15 +560,7 @@ func profileValue(v any) (string, error) {
 		}
 		return strings.Join(parts, ","), nil
 	case map[string]any:
-		parts := make([]string, 0, len(v))
-		for _, k := range slices.Sorted(maps.Keys(v)) {
-			s, ok := v[k].(string)
-			if !ok {
-				return "", errors.New("objects may only contain string values")
-			}
-			parts = append(parts, k+"="+s)
-		}
-		return strings.Join(parts, ","), nil
+		return "", errors.New("objects are only allowed for extra-auth-params")
 	default:
 		return "", fmt.Errorf("unsupported value %v", v)
 	}
@@ -550,29 +578,40 @@ var managedParams = []string{
 	"redirect_uri", "client_id", "response_type", "scope",
 }
 
-func parseParams(s string) (map[string]string, error) {
-	out := map[string]string{}
+// addParams applies the key=value,key=value list s to params.
+func addParams(params map[string]string, s string) error {
 	for kv := range strings.SplitSeq(s, ",") {
 		kv = strings.TrimSpace(kv)
 		if kv == "" {
 			continue
 		}
 		k, v, ok := strings.Cut(kv, "=")
-		if !ok || k == "" {
-			return nil, fmt.Errorf("invalid extra-auth-params entry %q: want key=value", kv)
+		if !ok {
+			return fmt.Errorf("invalid extra-auth-params entry %q: want key=value", kv)
 		}
-		if slices.Contains(managedParams, k) {
-			return nil, fmt.Errorf("extra-auth-params cannot set %q: agw-token sets it itself", k)
-		}
-		// Later entries win; an empty value removes the key, which is how a
-		// preset parameter is turned off (prompt=).
-		if v == "" {
-			delete(out, k)
-		} else {
-			out[k] = v
+		if err := setParam(params, k, v); err != nil {
+			return err
 		}
 	}
-	return out, nil
+	return nil
+}
+
+// setParam sets one extra authorization parameter. Later calls win; an empty
+// value removes the key, which is how a preset parameter is turned off
+// (prompt=).
+func setParam(params map[string]string, k, v string) error {
+	if k == "" {
+		return fmt.Errorf("invalid extra-auth-params entry %q: want key=value", "="+v)
+	}
+	if slices.Contains(managedParams, k) {
+		return fmt.Errorf("extra-auth-params cannot set %q: agw-token sets it itself", k)
+	}
+	if v == "" {
+		delete(params, k)
+	} else {
+		params[k] = v
+	}
+	return nil
 }
 
 func parseDuration(key, s string) (time.Duration, error) {

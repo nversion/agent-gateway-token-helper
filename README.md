@@ -9,7 +9,9 @@ standard OIDC provider:
   PKCE and a loopback redirect (RFC 8252).
 - Later runs print the stored token while it is valid for at least `--min-valid`
   (default 5m). Otherwise they refresh it with the refresh token, and open the browser
-  again only if the refresh fails.
+  again only if the refresh fails or returns a token that doesn't last that long. A
+  token valid for less than `--min-valid` is never printed: if even a new sign-in
+  doesn't give one, `agw-token` fails and says so.
 - Tokens are kept in the platform's secret store (see [Token storage](#token-storage)).
 - On success, stdout contains only the token. Messages go to stderr. A failure exits
   non-zero.
@@ -456,7 +458,8 @@ parameters are added to the preset's, with yours winning on conflicts, and an em
 value removes a preset parameter (`--extra-auth-params prompt=`). Parameters the
 login sets itself (`state`, `nonce`, `code_challenge`, `code_challenge_method`,
 `redirect_uri`, `client_id`, `response_type`, `scope`) are rejected; use `--scopes`
-for scopes. For example, to
+for scopes. In a profile, `extra-auth-params` can also be a JSON object, as in the
+example above; its values may then contain commas, such as a JSON `claims` parameter. For example, to
 limit Google's account picker to your Workspace domain:
 
 ```sh

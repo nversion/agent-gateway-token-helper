@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -332,6 +333,37 @@ func TestExtraAuthParamsMergeWithPreset(t *testing.T) {
 	}
 	if len(c.AuthParams) != 0 {
 		t.Fatalf("params %v, want none", c.AuthParams)
+	}
+}
+
+func TestExtraAuthParamsProfileObject(t *testing.T) {
+	home := t.TempDir()
+	claims := `{"id_token":{"acr":{"essential":true},"auth_time":{"essential":true}}}`
+	writeFile(t, filepath.Join(home, FileName), `{"profiles": {"default": {
+		"provider": "google",
+		"extra-auth-params": {"claims": `+strconv.Quote(claims)+`, "prompt": ""}
+	}}}`)
+	c, err := load(t, home, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"access_type": "offline", "claims": claims}
+	if !maps.Equal(c.AuthParams, want) {
+		t.Fatalf("params %v, want %v", c.AuthParams, want)
+	}
+
+	writeFile(t, filepath.Join(home, FileName), `{"profiles": {"default": {
+		"provider": "google", "extra-auth-params": {"state": "fixed"}
+	}}}`)
+	if _, err := load(t, home, nil, nil); err == nil || !strings.Contains(err.Error(), "cannot set") {
+		t.Errorf("err %v, want cannot set", err)
+	}
+
+	writeFile(t, filepath.Join(home, FileName), `{"profiles": {"default": {
+		"provider": "google", "tenant": {"a": "b"}
+	}}}`)
+	if _, err := load(t, home, nil, nil); err == nil || !strings.Contains(err.Error(), "only allowed for extra-auth-params") {
+		t.Errorf("err %v, want only allowed for extra-auth-params", err)
 	}
 }
 
