@@ -77,6 +77,12 @@ configuration profile on macOS ([full examples](#claude-desktop-model-traffic-th
 | `inferenceCredentialHelperTtlSec` | `240` |
 | `inferenceCredentialHelperTimeoutSec` | `300` |
 
+
+Install Claude Desktop via MSIX:
+* https://support.claude.com/en/articles/12622703-deploy-claude-desktop-for-windows
+
+Also make sure the firewall is open for "downloads.claude.ai" as Claude Desktop will download the latest version of Claude Code as a private copy it uses for chats and cowork.
+
 *Codex:* add to `~/.codex/config.toml` (`%USERPROFILE%\.codex\config.toml` on Windows):
 
 ```toml
