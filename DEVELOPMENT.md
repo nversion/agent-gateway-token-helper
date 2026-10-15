@@ -36,6 +36,25 @@ finds and replaces an installed one.
 
 ## Testing and linting
 
+Install Go (the version in `go.mod`) and the `golangci-lint` version pinned in
+`.github/workflows/build.yaml`. The following matches CI; rerun it when that pin changes:
+
+```sh
+curl -sSfL https://golangci-lint.run/install.sh | sh -s -- -b "$(go env GOPATH)/bin" v2.14.0
+export PATH="$(go env GOPATH)/bin:$PATH"
+```
+
+For `scripts/linting.sh --fix`, also install `goimports` using the `golang.org/x/tools`
+version in `go.mod`:
+
+```sh
+go install golang.org/x/tools/cmd/goimports@v0.50.0
+```
+
+If you set `GOBIN`, put that directory on `PATH` too. The script needs Bash and a native
+C toolchain for race tests. `staticcheck` and `govulncheck` are pinned in `go.mod`'s
+`tool` block and run through `go tool`; they do not need separate installs.
+
 ```sh
 scripts/linting.sh                       # everything CI runs; --fix rewrites imports first
 go test ./...                            # unit + in-process flow tests
@@ -57,12 +76,13 @@ AGW_HOME=$(mktemp -d) go run ./cmd/agw-token --issuer http://127.0.0.1:9999 --cl
 
 ## CI
 
-The Build workflow (`.github/workflows/build.yaml`) runs on every push:
+The Build workflow (`.github/workflows/build.yaml`) runs on pushes to `main`, pushes of
+`v*` tags, pull requests targeting `main`, and manual dispatches:
 
 | Job | What it does |
 |---|---|
 | `lint`, `test` | `scripts/linting.sh` and the unit and integration tests |
-| `build` | `scripts/build.sh` for every platform; attests the binaries on a public repository |
+| `build` | `scripts/build.sh` for every platform; attests tag-build binaries on a public repository |
 | `reproducible` | builds Linux and Windows twice and diffs the results |
 | `msi` | builds the unsigned `.msi` packages |
 | `msi-install` | installs and uninstalls one `.msi` on Windows |
@@ -83,14 +103,15 @@ git clone https://github.com/nversion/agent-gateway-token-helper && cd agent-gat
 git checkout v1.2.3
 gh release download v1.2.3 --pattern SHA256SUMS-unsigned   # or from the releases page
 scripts/build.sh linux amd64           # or windows amd64, windows arm64, linux arm64
-cd build && shasum -a 256 --check --ignore-missing ../SHA256SUMS-unsigned
+(cd build && shasum -a 256 --check --ignore-missing ../SHA256SUMS-unsigned)
 ```
 
 The Windows binaries you download carry an Authenticode signature, so their checksum
 differs from your build. `verify-build` removes the signature and compares what is left,
-for single binaries or whole release archives:
+for single binaries or whole release archives. Continue from the repository root:
 
 ```sh
+gh release download v1.2.3 --pattern agw-token-1.2.3-windows-amd64.zip
 go run ./cmd/verify-build SHA256SUMS-unsigned agw-token-1.2.3-windows-amd64.zip
 ```
 
@@ -101,16 +122,20 @@ with `msiexec /a agw-token-1.2.3-windows-amd64.msi /qn TARGETDIR=C:\extract` on 
 and check those:
 
 ```sh
+gh release download v1.2.3 --pattern agw-token-1.2.3-windows-amd64.msi
 msiextract -C msi agw-token-1.2.3-windows-amd64.msi
-go run ./cmd/verify-build SHA256SUMS-unsigned msi/*/*.exe
+find msi -type f -name '*.exe' -exec go run ./cmd/verify-build SHA256SUMS-unsigned {} +
 ```
 
 macOS builds are not reproducible: they use cgo for the Keychain, and the C compiler and
 SDK version end up in the binary. Check those through their signature and notarization,
 and the build provenance attestation instead.
 
-Every release file has a GitHub build provenance attestation. It ties the file to this
-repository, the tag's commit and the workflow that built it:
+A full release from the public repository has GitHub attestations once the signing
+upload's attestation workflow succeeds. The Build workflow attests the unsigned CI
+binaries. The separate "Attest signed release" workflow attests uploaded assets after
+rebuilding and comparing Linux and Windows; it does not reproduce the macOS build or
+the manual signing operation. Partial uploads do not request attestations.
 
 ```sh
 gh attestation verify agw-token-1.2.3-darwin-arm64.zip --repo nversion/agent-gateway-token-helper
@@ -157,17 +182,25 @@ scripts/release-sign.sh v1.2.3 \
 `--skip-macos` or `--skip-windows` leaves one OS unsigned, for example when you lack
 the certificate for it.
 
-**4. Upload.** This creates or updates a draft GitHub release. Check the draft, then run
-it again with `--publish`. A full upload runs the "Attest signed release" workflow.
+**4. Upload.** This creates or updates a draft GitHub release and requests the
+"Attest signed release" workflow. The upload script does not wait for that workflow.
+Check the draft and wait for its attestation run to succeed before publishing:
 
 ```sh
 scripts/release-upload.sh v1.2.3
+gh run list --workflow attest-signed.yaml
+# Use the run ID for this tag's upload from the list above.
+gh run watch RUN_ID --exit-status
 scripts/release-upload.sh v1.2.3 --publish
 ```
 
+The publish command uploads the assets and requests attestation again; check that run
+too before announcing the release.
+
 It refuses unsigned builds unless you pass `--allow-unsigned`. `--only windows` uploads
-one platform, and `--force` replaces assets on an already published release. Run each
-script with `--help` for all its flags.
+one platform, and `--force` replaces assets on an already published release.
+`release-sign.sh --help` and `release-upload.sh --help` list their flags.
+`release-download.sh` takes only the release tag and does not support `--help`.
 
 ## Signing prerequisites
 

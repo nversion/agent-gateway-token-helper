@@ -20,9 +20,10 @@ staticcheck, unused, misspell, modernize, plus gofmt and goimports. Details that
 
 ## Dependencies
 
-Only the standard library and Go-team modules (`golang.org/x/...`). No go-oidc or JWT
-libraries: ID token claims are decoded in `internal/idtoken` (see its package doc for why
-signatures aren't verified).
+Runtime dependencies use only the standard library and Go-team modules (`golang.org/x/...`).
+No go-oidc or JWT libraries: ID token claims are decoded in `internal/idtoken` (see its
+package doc for why signatures aren't verified). Development tools such as staticcheck,
+and their transitive dependencies in `go.mod`, are exempt from this restriction.
 
 ## Tests
 
@@ -55,5 +56,6 @@ use placeholders and show how to look them up.
 
 Releases are signed by hand on a Mac from the binaries CI builds for a `v*` tag, using
 `scripts/release-download.sh`, `scripts/release-sign.sh` and
-`scripts/release-upload.sh`. The steps and prerequisites are in `DEVELOPMENT.md`; run
-each script with `--help` for its flags.
+`scripts/release-upload.sh`. The steps and prerequisites are in `DEVELOPMENT.md`.
+The download script takes only a release tag; the signing and upload scripts support
+`--help` for their flags.
