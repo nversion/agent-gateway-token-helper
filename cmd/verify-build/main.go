@@ -21,7 +21,7 @@
 // macOS binaries cannot be checked this way: they are built with cgo, and the C
 // toolchain and SDK make the output differ between machines. verify-build
 // reports them as not verified; check them with codesign and gh attestation
-// verify instead, as described in the README.
+// verify instead, as described in DEVELOPMENT.md.
 package main
 
 import (

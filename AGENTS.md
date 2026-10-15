@@ -38,42 +38,22 @@ signatures aren't verified).
 calls it. It pins the exact Go version from the `go` line in `go.mod`, so bumping that
 line changes every release hash. Linux and Windows builds must stay byte-for-byte
 reproducible (the `reproducible` CI job builds them twice and diffs): no cgo, no VCS
-stamping, nothing time- or path-dependent in ldflags. macOS needs cgo and is not
-reproducible.
+stamping, nothing time- or path-dependent in ldflags.
 
-The Windows Installer packages are built by `scripts/build-msi.sh` with `wixl` from
-msitools; the layout (install directory `C:\Program Files\Agent Gateway helper`, system
-PATH entry) is in `packaging/windows/agw-token.wxs`. Never change its `UpgradeCode`: it
-is how a newer MSI finds and replaces an installed one. CI's `msi` job builds both
-packages and `msi-install` installs and uninstalls one on Windows. MSIs are not
-reproducible, so their executables are extracted and checked with `cmd/verify-build`.
+Never change the `UpgradeCode` in `packaging/windows/agw-token.wxs`: it is how a newer
+MSI finds and replaces an installed one.
+
+## Documentation
+
+`README.md` is a short intro; link to other files with relative paths. Harness setup lives in `docs/` (one file
+per harness), configuration reference in `docs/configuration.md`, and building, CI,
+verification, releasing and signing in `DEVELOPMENT.md`. Never put real signing values
+(Apple identity, notary profile, Azure account or profile) in the repository; the docs
+use placeholders and show how to look them up.
 
 ## Releasing
 
-Releases are signed by hand on a Mac, from the binaries CI builds for a `v*` tag:
-
-1. `git tag v1.2.3 && git push origin v1.2.3` - the Build workflow builds the tag with
-   `main.version` set to `1.2.3` and attests each binary.
-2. `scripts/release-download.sh v1.2.3` - waits for that run, downloads its binaries
-   into `dist/v1.2.3/unsigned` and checks their attestations.
-3. `scripts/release-sign.sh v1.2.3 --apple-identity ... --notary-profile ...
-   --azure-endpoint ... --azure-account ... --azure-profile ...` - codesigns and
-   notarizes the macOS binaries, signs the Windows ones with the vendored
-   `tools/jsign-*.jar` (Azure Artifact Signing), and packages everything into
-   `dist/v1.2.3/release`. The Windows `.msi` installers are built from the signed
-   executables and then signed themselves. `--skip-macos` / `--skip-windows` leave one OS unsigned.
-   Besides `SHA256SUMS` of the signed files it writes `SHA256SUMS-unsigned`, which users
-   compare their own builds against, and checks with `cmd/verify-build` that signing
-   only added a signature to the Windows binaries.
-4. `scripts/release-upload.sh v1.2.3` - creates or updates a draft GitHub release;
-   add `--publish` to publish it. It refuses unsigned builds unless `--allow-unsigned`.
-   A full upload then runs the "Attest signed release" workflow
-   (`.github/workflows/attest-signed.yaml`), which rebuilds Linux and Windows from the
-   tag, checks the Linux and Windows assets and `SHA256SUMS-unsigned` against that
-   rebuild, and attests every asset.
-
-Prerequisites: `gh auth login`, `az login` as a user with the Certificate Profile
-Signer role on the signing account, a Java runtime, msitools (`brew install msitools`), the Developer ID Application
-certificate in the login keychain, and a notarytool profile from
-`xcrun notarytool store-credentials`.
-Run each script with `--help` for its flags.
+Releases are signed by hand on a Mac from the binaries CI builds for a `v*` tag, using
+`scripts/release-download.sh`, `scripts/release-sign.sh` and
+`scripts/release-upload.sh`. The steps and prerequisites are in `DEVELOPMENT.md`; run
+each script with `--help` for its flags.
