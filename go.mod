@@ -1,10 +1,10 @@
 module github.com/nversion/agent-gateway-token-helper
 
-go 1.27.0
+go 1.27.2
 
 require (
 	golang.org/x/oauth2 v0.37.0
-	golang.org/x/sys v0.48.0
+	golang.org/x/sys v0.49.0
 )
 
 require (

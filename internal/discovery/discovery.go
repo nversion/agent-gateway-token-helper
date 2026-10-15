@@ -179,11 +179,10 @@ func splitEntraIssuer(issuer string) (base, tenant string, ok bool) {
 	if !ok {
 		return "", "", false
 	}
-	i := strings.LastIndexByte(rest, '/')
-	if i < 0 {
+	base, tenant, ok = strings.CutLast(rest, "/")
+	if !ok {
 		return "", "", false
 	}
-	base, tenant = rest[:i], rest[i+1:]
 	u, err := url.Parse(base)
 	if err != nil || u.Scheme == "" || u.Host == "" || tenant == "" {
 		return "", "", false
