@@ -123,7 +123,8 @@ The `hd` parameter only filters the login screen. The gateway still has to check
 > it must also check the user's organization: `hd` or `email` for Google, `tid` (and
 > `oid` or roles) for Entra. Tokens from the Azure CLI client have no `groups` claim.
 > Google and Microsoft can also restrict their first-party clients at any time. For
-> production, register your own client.
+> production, register your own client. [agent-gateway.md](agent-gateway.md) shows an
+> agentgateway config that does these checks.
 
 ## Registering your own client
 
@@ -141,6 +142,14 @@ PKCE and a loopback redirect URI:
 
 Providers that require an exact redirect URI need a fixed port: `--redirect-port 8400`.
 Use `--redirect-port 8400+` to also try the next 99 ports.
+
+## Token lifetime
+
+`agw-token` prints the stored token while it is valid for at least `--min-valid`
+(default 5m). Otherwise it refreshes it with the refresh token, and opens the browser
+again only if the refresh fails or returns a token that doesn't last that long. A token
+valid for less than `--min-valid` is never printed: if even a new sign-in doesn't give
+one, `agw-token` fails and says so.
 
 ## Token storage
 

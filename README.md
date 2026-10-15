@@ -7,14 +7,19 @@ standard OIDC provider:
 
 - The first run opens the browser and signs in using the authorization code flow with
   PKCE and a loopback redirect (RFC 8252).
-- Later runs print the stored token while it is valid for at least `--min-valid`
-  (default 5m). Otherwise they refresh it with the refresh token, and open the browser
-  again only if the refresh fails or returns a token that doesn't last that long. A
-  token valid for less than `--min-valid` is never printed: if even a new sign-in
-  doesn't give one, `agw-token` fails and says so.
+- Later runs reuse or refresh the stored token, and only open the browser again when
+  that fails (see [Token lifetime](docs/configuration.md#token-lifetime)).
 - Tokens are kept in the platform's secret store (see [Token storage](docs/configuration.md#token-storage)).
 - On success, stdout contains only the token. Messages go to stderr. A failure exits
   non-zero.
+- The `google` and `entra` presets sign in with the public clients of the gcloud SDK and
+  the Azure CLI, so you don't need to register an app with your provider to get started.
+- `agw-token-google` and `agw-token-entra` work with no flags, for harnesses like
+  Claude Desktop that can't pass arguments (see
+  [Google and Entra without flags](#google-and-entra-without-flags)).
+- Release binaries are signed and notarized on macOS and signed with an MSI installer on
+  Windows, so they can be deployed through MDM in enterprise environments (see
+  [Install](#install)).
 
 ## Install
 
@@ -77,6 +82,21 @@ agw-token --issuer https://idp.example.com/realms/main --client-id agent-gateway
 - `decoded`: the token's header and payload as pretty-printed JSON, for debugging. The signature is not verified.
 
 Run `agw-token -h` to see all flags.
+
+## Google and Entra without flags
+
+The `google` and `entra` presets sign in with the public clients of the gcloud SDK and
+the Azure CLI, so you don't need to register an app with your provider to get started.
+The gateway must then check the user's organization, not just the audience (see
+[Provider presets](docs/configuration.md#provider-presets)).
+
+Some harnesses, like Claude Desktop, only take the path to an executable and can't pass
+it arguments. Instead of writing a shell wrapper, use `agw-token-google` or
+`agw-token-entra`, which default to those presets. `agw-token-entra` uses the
+`organizations` tenant, so any work or school account can sign in. Further settings,
+such as a specific tenant, can go in an `agw-token.json` next to the executable or in
+`AGW_` environment variables. Copying the binary to `agw-token-<name>` selects the
+profile `<name>` from that file (see [Executable name](docs/configuration.md#executable-name)).
 
 ## Using it from a harness
 
@@ -145,5 +165,6 @@ a browser sign-in. Any other harness that runs a command for a credential works 
 - [Claude Desktop](docs/claude-desktop.md): managed settings for Windows and macOS.
 - [Codex](docs/codex.md): a custom model provider with command auth.
 - [Other harnesses](docs/other-harnesses.md): any command-based credential.
+- [Agent gateway](docs/agent-gateway.md): an example agentgateway config for Cloud Run and Kubernetes, with per-person budgets.
 - [Configuration](docs/configuration.md): profiles, presets, your own client, token storage and validation.
 - [Development](DEVELOPMENT.md): building, testing, verifying and releasing.
