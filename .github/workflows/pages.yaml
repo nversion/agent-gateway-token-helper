@@ -1,7 +1,7 @@
 name: Deploy docs to GitHub Pages
 
 # Publishes docs/ (the setup generator at docs/index.html and the Markdown guides)
-# to https://nversion.dk/agent-gateway-token-helper/. Same mechanism as the root
+# to https://agw-token.nversion.dk/. Same mechanism as the root
 # site in nversion/nversion.github.io: an artifact plus actions/deploy-pages, so the
 # repository's Pages source must be set to "GitHub Actions" (see DEVELOPMENT.md).
 

@@ -4,7 +4,7 @@ Codex can send model traffic to a
 [custom model provider](https://learn.chatgpt.com/docs/config-file/config-advanced) and get the
 bearer token from a command in the provider's `auth` table. Add this to
 `~/.codex/config.toml` (`%USERPROFILE%\.codex\config.toml` on Windows), or let the
-[setup generator](https://nversion.dk/agent-gateway-token-helper/) fill it in:
+[setup generator](https://agw-token.nversion.dk/) fill it in:
 
 ```toml
 model_provider = "gateway"

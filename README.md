@@ -104,7 +104,7 @@ for CLI help.
 
 ## Documentation
 
-The [setup generator](https://nversion.dk/agent-gateway-token-helper/) fills in the
+The [setup generator](https://agw-token.nversion.dk/) fills in the
 configuration files below for your gateway and provider, with download and copy buttons
 and a note on where each file goes on Windows, macOS and Linux. The guides explain them:
 

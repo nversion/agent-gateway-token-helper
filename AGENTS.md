@@ -50,7 +50,7 @@ MSI finds and replaces an installed one.
 per harness), configuration reference in `docs/configuration.md`, and building, CI,
 verification, releasing and signing in `DEVELOPMENT.md`.
 
-`docs/` is also the GitHub Pages site (https://nversion.dk/agent-gateway-token-helper/),
+`docs/` is also the GitHub Pages site (https://agw-token.nversion.dk/),
 published by `.github/workflows/pages.yaml` on every push to `main` that touches it.
 `docs/index.html` is the setup generator: a single file with no external scripts, fonts or
 build step, so the workflow uploads `docs/` as it is. When a harness doc changes what a

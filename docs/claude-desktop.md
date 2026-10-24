@@ -2,7 +2,7 @@
 
 Claude Desktop is configured through managed settings: a `.reg` file or Group Policy on
 Windows, a configuration profile on macOS, a root-owned JSON file on Linux. The
-[setup generator](https://nversion.dk/agent-gateway-token-helper/) produces these files
+[setup generator](https://agw-token.nversion.dk/) produces these files
 from a short form; this page explains what they contain. These keys send model traffic
 through the gateway:
 

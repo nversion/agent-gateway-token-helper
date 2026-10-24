@@ -74,12 +74,10 @@ the plists with `plutil`. Pass `--write <dir>` to look at the files it produces.
 check and then uploads the folder with `actions/upload-pages-artifact` and publishes it
 with `actions/deploy-pages`, like the root site in `nversion/nversion.github.io`. It runs
 on pushes to `main` that touch `docs/`, and can be started by hand from the Actions tab.
-The repository's Pages source has to be "GitHub Actions" once, set under Settings >
-Pages or with:
-
-```sh
-gh api -X POST repos/nversion/agent-gateway-token-helper/pages -f build_type=workflow
-```
+The site is https://agw-token.nversion.dk/. Its one-time setup, already done, is the
+Pages source "GitHub Actions" under Settings > Pages, the custom domain
+`agw-token.nversion.dk` in the same place with "Enforce HTTPS" ticked, and a DNS CNAME
+record for that name pointing at `nversion.github.io`.
 
 `cmd/fake-oidc` runs the test provider as a standalone server. It signs in
 `alice@example.com` without showing a login page:
