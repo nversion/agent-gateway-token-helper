@@ -1,8 +1,10 @@
 # Claude Desktop
 
 Claude Desktop is configured through managed settings: a `.reg` file or Group Policy on
-Windows, a configuration profile on macOS. These keys send model traffic through the
-gateway:
+Windows, a configuration profile on macOS, a root-owned JSON file on Linux. The
+[setup generator](https://nversion.dk/agent-gateway-token-helper/) produces these files
+from a short form; this page explains what they contain. These keys send model traffic
+through the gateway:
 
 | Key | Value |
 |---|---|
@@ -13,6 +15,10 @@ gateway:
 | `inferenceCredentialHelperWindows` | full Windows path (Windows only) |
 | `inferenceCredentialHelperTtlSec` | `240` (4 minutes) |
 | `inferenceCredentialHelperTimeoutSec` | `300` |
+
+In a registry file or a configuration profile, every value is a string; Claude Desktop
+also accepts `REG_DWORD` for the two integer keys. Only the Linux file takes JSON
+numbers and arrays.
 
 ## Installing Claude Desktop on Windows
 
@@ -87,11 +93,40 @@ can export one, or add these keys to the payload of your MDM's custom settings:
 	<key>inferenceCredentialHelper</key>
 	<string>/usr/local/bin/agw-token-entra</string>
 	<key>inferenceCredentialHelperTtlSec</key>
-	<integer>240</integer>
+	<string>240</string>
 	<key>inferenceCredentialHelperTimeoutSec</key>
-	<integer>300</integer>
+	<string>300</string>
 </dict>
 </plist>
+```
+
+To test on a Mac without an MDM, either install the exported `.mobileconfig` by
+double-clicking it and approving it under System Settings > General > Device Management,
+or enter the same values in the app (Help > Troubleshooting > Enable Developer Mode, then
+Developer > Configure Third-Party Inference, Apply Changes), which writes a local
+configuration instead of a managed one. Copying the plist into
+`/Library/Managed Preferences/` and running `sudo killall cfprefsd` also works for a quick
+check, but the preferences daemon may overwrite or ignore a hand-placed file.
+
+**Linux:** extract the tarball to a fixed location, for example `/usr/local/bin`. The
+settings go in `/etc/claude-desktop/managed-settings.json` as plain JSON. Claude Desktop
+only honors the file when it and its directory are owned by root, are not symlinks and
+are not writable by anyone else:
+
+```json
+{
+  "inferenceProvider": "gateway",
+  "inferenceGatewayBaseUrl": "https://agw.example.com",
+  "inferenceCredentialKind": "helper-script",
+  "inferenceCredentialHelper": "/usr/local/bin/agw-token-entra",
+  "inferenceCredentialHelperTtlSec": 240,
+  "inferenceCredentialHelperTimeoutSec": 300
+}
+```
+
+```sh
+sudo install -d -m 755 -o root /etc/claude-desktop
+sudo install -m 644 -o root managed-settings.json /etc/claude-desktop/
 ```
 
 ## Passing arguments
@@ -123,6 +158,8 @@ string, as required by the [Desktop configuration reference](https://claude.com/
   <string>["--profile","work"]</string>
 </dict>
 ```
+
+The Linux file takes a JSON array: `"inferenceCredentialHelperArgs": ["--profile", "work"]`.
 
 For an older Desktop release without this setting, use the provider binaries or a
 [binary named for the profile](configuration.md#executable-name).

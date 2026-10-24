@@ -1,0 +1,1100 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent gateway harness setup</title>
+<meta name="description" content="Generate the configuration files that point Claude Desktop, Claude Code, Codex and other harnesses at an agent gateway through agw-token, for Windows, macOS and Linux.">
+<style>
+:root {
+    --bg: #f6f7f9;
+    --panel: #ffffff;
+    --text: #1d2026;
+    --muted: #5d6470;
+    --border: #d9dde3;
+    --accent: #2457c5;
+    --accent-text: #ffffff;
+    --warn-bg: #fff6df;
+    --warn-border: #e4c46a;
+    --err-bg: #fdecec;
+    --err-border: #e39a9a;
+    --code-bg: #f0f2f5;
+    --chip-bg: #eceff3;
+    --tk-key: #8a3b9c;
+    --tk-str: #1d6f3a;
+    --tk-num: #b2561a;
+    --tk-cmt: #7a828c;
+    --tk-tag: #1f5fbf;
+    --tk-sec: #a8341f;
+}
+@media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+        --bg: #15171b;
+        --panel: #1e2126;
+        --text: #e7e9ee;
+        --muted: #9aa2ad;
+        --border: #343941;
+        --accent: #6f9cf0;
+        --accent-text: #0f1420;
+        --warn-bg: #3a3118;
+        --warn-border: #7a6626;
+        --err-bg: #3d1f1f;
+        --err-border: #7a3a3a;
+        --code-bg: #14161a;
+        --chip-bg: #2a2e35;
+        --tk-key: #d19be6;
+        --tk-str: #8fd49a;
+        --tk-num: #f0b071;
+        --tk-cmt: #7f8893;
+        --tk-tag: #86b3f7;
+        --tk-sec: #f29a86;
+    }
+}
+:root[data-theme="dark"] {
+    --bg: #15171b;
+    --panel: #1e2126;
+    --text: #e7e9ee;
+    --muted: #9aa2ad;
+    --border: #343941;
+    --accent: #6f9cf0;
+    --accent-text: #0f1420;
+    --warn-bg: #3a3118;
+    --warn-border: #7a6626;
+    --err-bg: #3d1f1f;
+    --err-border: #7a3a3a;
+    --code-bg: #14161a;
+    --chip-bg: #2a2e35;
+    --tk-key: #d19be6;
+    --tk-str: #8fd49a;
+    --tk-num: #f0b071;
+    --tk-cmt: #7f8893;
+    --tk-tag: #86b3f7;
+    --tk-sec: #f29a86;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body {
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    padding: 24px 16px 48px;
+}
+main { max-width: 1180px; margin: 0 auto; }
+h1 { font-size: 1.6rem; margin: 0 0 4px; }
+h2 { font-size: 1.05rem; margin: 0 0 8px; }
+h3 { font-size: 1rem; margin: 0; }
+p { margin: 0 0 12px; }
+a { color: var(--accent); }
+.lead { color: var(--muted); max-width: 72ch; margin-bottom: 24px; }
+.layout { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+@media (min-width: 940px) { .layout { grid-template-columns: 370px minmax(0, 1fr); align-items: start; } }
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 18px; }
+fieldset { border: 0; padding: 0; margin: 0 0 18px; }
+legend { font-weight: 600; padding: 0; margin-bottom: 8px; }
+label { display: block; font-size: 0.92rem; margin-bottom: 10px; }
+label span.name { display: block; font-weight: 500; margin-bottom: 3px; }
+label small { color: var(--muted); display: block; }
+input[type=text], input[type=url], input[type=number], select {
+    width: 100%;
+    font: inherit;
+    color: var(--text);
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 7px 9px;
+}
+input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.radio { margin-bottom: 6px; font-weight: 400; }
+.radio input { margin: 0 6px 0 0; vertical-align: -1px; }
+.row2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 10px; }
+.row2 label { min-width: 0; }
+.row2 label span.name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+input[type=number] { min-width: 0; width: 100%; }
+.hidden { display: none !important; }
+.tabs { display: flex; flex-wrap: wrap; gap: 4px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+.tabs button {
+    font: inherit; font-size: 0.9rem;
+    background: transparent; color: var(--muted);
+    border: 1px solid transparent; border-bottom: 0;
+    border-radius: 6px 6px 0 0; padding: 7px 12px; cursor: pointer;
+    margin-bottom: -1px;
+}
+.tabs button[aria-selected="true"] {
+    color: var(--text); background: var(--panel);
+    border-color: var(--border); border-bottom: 1px solid var(--panel);
+}
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 16px; font-size: 0.9rem; }
+.chips span.lbl { color: var(--muted); margin-right: 4px; }
+.chips button {
+    font: inherit; font-size: 0.85rem; cursor: pointer;
+    background: var(--chip-bg); color: var(--text);
+    border: 1px solid transparent; border-radius: 999px; padding: 4px 12px;
+}
+.chips button[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); }
+.intro { color: var(--muted); font-size: 0.92rem; margin-bottom: 14px; }
+.card { border: 1px solid var(--border); border-radius: 8px; padding: 14px; margin-bottom: 16px; }
+.card-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; margin-bottom: 6px; }
+.card-head .os { font-size: 0.8rem; color: var(--muted); background: var(--chip-bg); border-radius: 999px; padding: 2px 9px; margin-left: 8px; vertical-align: middle; }
+.btns { display: flex; gap: 8px; }
+.btn {
+    font: inherit; font-size: 0.88rem; cursor: pointer;
+    border: 1px solid var(--border); border-radius: 6px;
+    background: var(--panel); color: var(--text); padding: 6px 12px;
+}
+.btn.primary { background: var(--accent); color: var(--accent-text); border-color: var(--accent); }
+.btn:disabled { opacity: 0.5; cursor: default; }
+.dest { font-size: 0.9rem; margin: 0 0 8px; }
+.dest code { word-break: break-all; }
+pre {
+    margin: 0 0 10px;
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px;
+    overflow: auto;
+    font: 0.84rem/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    white-space: pre;
+    max-height: 50vh;
+}
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: var(--code-bg); padding: 1px 4px; border-radius: 4px; font-size: 0.92em; }
+pre code { background: none; padding: 0; font-size: inherit; }
+.tk-key { color: var(--tk-key); }
+.tk-str { color: var(--tk-str); }
+.tk-num { color: var(--tk-num); }
+.tk-cmt { color: var(--tk-cmt); font-style: italic; }
+.tk-tag { color: var(--tk-tag); }
+.tk-sec { color: var(--tk-sec); font-weight: 600; }
+.steps { margin: 0; padding-left: 20px; font-size: 0.9rem; }
+.steps li { margin-bottom: 4px; }
+.note { border: 1px solid var(--warn-border); background: var(--warn-bg); border-radius: 8px; padding: 10px 12px; font-size: 0.9rem; margin-bottom: 12px; }
+.error { border: 1px solid var(--err-border); background: var(--err-bg); border-radius: 8px; padding: 10px 12px; font-size: 0.9rem; margin-bottom: 12px; }
+.note ul, .error ul { margin: 4px 0 0; padding-left: 18px; }
+.empty { color: var(--muted); font-size: 0.92rem; }
+footer { color: var(--muted); font-size: 0.85rem; margin-top: 28px; }
+.sr { position: absolute; left: -9999px; }
+</style>
+</head>
+<body>
+<main>
+<h1>Agent gateway harness setup</h1>
+<p class="lead">
+Fill in the form once and download or copy the configuration files that send Claude Desktop,
+Claude Code, Codex or any other harness through your agent gateway, with
+<code>agw-token</code> as the credential helper. Everything runs in your browser; nothing is
+sent anywhere. The background is in the
+<a href="https://github.com/nversion/agent-gateway-token-helper#readme">project README</a>.
+</p>
+
+<div class="layout">
+<form class="panel" id="form" autocomplete="off">
+    <fieldset>
+        <legend>Gateway</legend>
+        <label>
+            <span class="name">Gateway base URL</span>
+            <input type="url" id="gateway" placeholder="https://agw.example.com" required>
+            <small>Model traffic goes here. Codex appends <code>/v1</code>, MCP uses the path below.</small>
+        </label>
+        <label>
+            <span class="name">MCP server URL</span>
+            <input type="url" id="mcp-url" placeholder="https://agw.example.com/mcp">
+            <small>Optional. An MCP server behind the gateway, for Claude Code's <code>.mcp.json</code>.</small>
+        </label>
+    </fieldset>
+
+    <fieldset>
+        <legend>Identity provider</legend>
+        <label class="radio"><input type="radio" name="provider" value="entra" checked> Microsoft Entra ID (<code>agw-token-entra</code>)</label>
+        <label class="radio"><input type="radio" name="provider" value="google"> Google (<code>agw-token-google</code>)</label>
+        <label class="radio"><input type="radio" name="provider" value="custom"> Other OIDC provider (<code>agw-token</code> with a profile)</label>
+
+        <div id="entra-opts">
+            <label>
+                <span class="name">Tenant</span>
+                <input type="text" id="tenant" placeholder="contoso.onmicrosoft.com">
+                <small>Optional. Restricts sign-in to your tenant; empty means <code>organizations</code>.</small>
+            </label>
+        </div>
+        <div id="google-opts" class="hidden">
+            <label>
+                <span class="name">Workspace domain</span>
+                <input type="text" id="hd" placeholder="example.com">
+                <small>Optional. Limits Google's account picker to this domain (<code>hd</code>); the gateway still has to check it.</small>
+            </label>
+        </div>
+        <div id="custom-opts" class="hidden">
+            <label>
+                <span class="name">Profile name</span>
+                <input type="text" id="profile" value="work">
+                <small>Harnesses that can pass arguments use <code>--profile</code>. Harnesses that run the helper bare need a copy of the binary named <code>agw-token-&lt;profile&gt;</code>.</small>
+            </label>
+            <label>
+                <span class="name">Issuer URL</span>
+                <input type="url" id="issuer" placeholder="https://idp.example.com/realms/main">
+            </label>
+            <label>
+                <span class="name">Client ID</span>
+                <input type="text" id="client-id" placeholder="agent-gateway">
+                <small>A public client with PKCE and a loopback redirect URI.</small>
+            </label>
+            <label>
+                <span class="name">Scopes</span>
+                <input type="text" id="scopes" value="openid email profile offline_access">
+            </label>
+            <label>
+                <span class="name">Fixed redirect port</span>
+                <input type="text" id="redirect-port" placeholder="8400">
+                <small>Optional. For providers that need an exact redirect URI, e.g. <code>http://localhost:8400/callback</code>.</small>
+            </label>
+        </div>
+    </fieldset>
+
+    <fieldset>
+        <legend>Helper location</legend>
+        <label>
+            <span class="name">Windows install directory</span>
+            <input type="text" id="win-dir" value="C:\Program Files\Agent Gateway helper">
+            <small>Where the MSI installs the executables.</small>
+        </label>
+        <label>
+            <span class="name">macOS install directory</span>
+            <input type="text" id="mac-dir" value="/usr/local/bin">
+        </label>
+        <label>
+            <span class="name">Linux install directory</span>
+            <input type="text" id="linux-dir" value="/usr/local/bin">
+        </label>
+    </fieldset>
+
+    <fieldset>
+        <legend>Timing</legend>
+        <div class="row2">
+            <label>
+                <span class="name">Token cache (sec)</span>
+                <input type="number" id="ttl" value="240" min="1" step="1">
+                <small>How long each harness reuses a token.</small>
+            </label>
+            <label>
+                <span class="name">Helper timeout (sec)</span>
+                <input type="number" id="timeout" value="300" min="1" max="600" step="1">
+                <small>Seconds allowed for a browser sign-in.</small>
+            </label>
+        </div>
+    </fieldset>
+
+    <fieldset>
+        <legend>Claude Desktop</legend>
+        <label>
+            <span class="name">Windows registry hive</span>
+            <select id="hive">
+                <option value="HKLM">HKEY_LOCAL_MACHINE (all users, needs admin)</option>
+                <option value="HKCU">HKEY_CURRENT_USER (this user only)</option>
+            </select>
+            <small>Claude Desktop ignores HKCU entirely when anything is set under HKLM.</small>
+        </label>
+        <label>
+            <span class="name">Registry integers</span>
+            <select id="reg-ints">
+                <option value="dword">REG_DWORD (dword:…)</option>
+                <option value="string">REG_SZ (decimal string)</option>
+            </select>
+            <small>Claude Desktop reads both. Group Policy tooling usually writes strings.</small>
+        </label>
+        <label>
+            <span class="name">Organization name</span>
+            <input type="text" id="org" placeholder="Contoso">
+            <small>Shown in System Settings &gt; Profiles on macOS.</small>
+        </label>
+        <label>
+            <span class="name">Profile identifier prefix</span>
+            <input type="text" id="prefix" placeholder="com.contoso">
+            <small>Reverse-DNS prefix for the macOS profile identifier.</small>
+        </label>
+    </fieldset>
+    <button type="button" class="btn" id="reset">Reset form</button>
+</form>
+
+<section class="panel">
+    <div id="problems" class="error hidden"></div>
+    <div id="warnings" class="note hidden"></div>
+    <div class="tabs" role="tablist" id="tabs"></div>
+    <div class="chips" id="platforms"><span class="lbl">Platform:</span></div>
+    <p class="intro" id="intro"></p>
+    <div id="cards"></div>
+</section>
+</div>
+
+<footer>
+    Part of <a href="https://github.com/nversion/agent-gateway-token-helper">agent-gateway-token-helper</a>.
+    Setup guides: <a href="https://github.com/nversion/agent-gateway-token-helper/blob/main/docs/claude-desktop.md">Claude Desktop</a>,
+    <a href="https://github.com/nversion/agent-gateway-token-helper/blob/main/docs/claude-code.md">Claude Code</a>,
+    <a href="https://github.com/nversion/agent-gateway-token-helper/blob/main/docs/codex.md">Codex</a>,
+    <a href="https://github.com/nversion/agent-gateway-token-helper/blob/main/docs/other-harnesses.md">other harnesses</a>,
+    <a href="https://github.com/nversion/agent-gateway-token-helper/blob/main/docs/configuration.md">configuration reference</a>.
+</footer>
+</main>
+
+<script>
+// The generators are plain functions on AGW so they can be tested outside a browser
+// (see scripts/check-generator.mjs). The DOM code at the bottom only runs in a page.
+var AGW = (function () {
+    "use strict";
+
+    var OS = {
+        windows: { label: "Windows" },
+        macos: { label: "macOS" },
+        linux: { label: "Linux" }
+    };
+
+    // ----- Derived configuration -----
+
+    // Fills in paths and arguments from the raw form values.
+    function derive(f) {
+        var p = f.provider;
+        var binary = p === "custom" ? "agw-token" : "agw-token-" + p;
+        var profile = (f.profile || "").trim() || "default";
+        var c = {
+            provider: p,
+            gateway: (f.gateway || "").trim().replace(/\/+$/, ""),
+            mcpUrl: (f.mcpUrl || "").trim(),
+            tenant: (f.tenant || "").trim(),
+            hd: (f.hd || "").trim(),
+            profile: profile,
+            issuer: (f.issuer || "").trim(),
+            clientId: (f.clientId || "").trim(),
+            scopes: (f.scopes || "").trim(),
+            redirectPort: (f.redirectPort || "").trim(),
+            hive: f.hive === "HKCU" ? "HKCU" : "HKLM",
+            regInts: f.regInts === "string" ? "string" : "dword",
+            ttl: parseInt(f.ttl, 10),
+            timeout: parseInt(f.timeout, 10),
+            org: (f.org || "").trim(),
+            prefix: (f.prefix || "").trim().replace(/\.+$/, ""),
+            binary: binary,
+            // Arguments for harnesses that can pass them. Profile-less presets need none.
+            args: p === "custom" ? ["--profile", profile] : [],
+            // A binary named after the profile, for harnesses that run the helper bare.
+            namedBinary: p === "custom" ? "agw-token-" + profile : binary,
+            dir: {
+                windows: (f.winDir || "").trim().replace(/[\\\/]+$/, ""),
+                macos: (f.macDir || "").trim().replace(/\/+$/, ""),
+                linux: (f.linuxDir || "").trim().replace(/\/+$/, "")
+            }
+        };
+        c.path = {
+            windows: c.dir.windows + "\\" + c.binary + ".exe",
+            macos: c.dir.macos + "/" + c.binary,
+            linux: c.dir.linux + "/" + c.binary
+        };
+        c.namedPath = {
+            windows: c.dir.windows + "\\" + c.namedBinary + ".exe",
+            macos: c.dir.macos + "/" + c.namedBinary,
+            linux: c.dir.linux + "/" + c.namedBinary
+        };
+        return c;
+    }
+
+    function validate(c) {
+        var problems = [], warnings = [];
+        if (!c.gateway) {
+            problems.push("Enter the gateway base URL.");
+        } else if (!/^https:\/\/[^\s/]+/i.test(c.gateway)) {
+            problems.push("The gateway base URL must start with https://.");
+        }
+        if (c.mcpUrl && !/^https:\/\/[^\s/]+/i.test(c.mcpUrl)) { problems.push("The MCP server URL must start with https://."); }
+        if (!(c.ttl >= 1)) { problems.push("Token cache must be at least 1 second."); }
+        if (!(c.timeout >= 1 && c.timeout <= 600)) { problems.push("Helper timeout must be between 1 and 600 seconds."); }
+        if (!/^[A-Za-z]:\\/.test(c.path.windows)) { problems.push("The Windows install directory must be an absolute path such as C:\\Program Files\\Agent Gateway helper."); }
+        if (c.path.macos.charAt(0) !== "/") { problems.push("The macOS install directory must be an absolute path such as /usr/local/bin."); }
+        if (c.path.linux.charAt(0) !== "/") { problems.push("The Linux install directory must be an absolute path such as /usr/local/bin."); }
+        if (c.provider === "custom") {
+            if (!/^[A-Za-z0-9._-]+$/.test(c.profile)) { problems.push("Profile name may only contain letters, digits, dot, dash and underscore."); }
+            if (!c.issuer) { problems.push("Enter the issuer URL for your OIDC provider."); }
+            else if (!/^https:\/\//i.test(c.issuer)) { problems.push("The issuer URL must start with https://."); }
+            if (!c.clientId) { problems.push("Enter the client ID."); }
+            if (!/\bopenid\b/.test(c.scopes)) { problems.push("Scopes must include openid."); }
+            if (c.redirectPort && !/^\d{1,5}\+?$/.test(c.redirectPort)) { problems.push("Redirect port must be a number, optionally followed by + to also try the next 99 ports."); }
+        }
+        if (c.provider === "entra" && c.tenant && /[\s"\\]/.test(c.tenant)) { problems.push("The tenant may not contain spaces, quotes or backslashes."); }
+        if (c.ttl >= 300) {
+            warnings.push("A token cache of " + c.ttl + " seconds is not below agw-token's default min-valid of 5 minutes, so agw-token.json sets min-valid to " +
+                minValid(c) + ". Keep that below the token lifetime your provider issues.");
+        }
+        if (c.timeout < 120) {
+            warnings.push("A helper timeout under 2 minutes rarely covers a browser sign-in. Users must then sign in from a terminal first.");
+        }
+        if (c.provider === "custom") {
+            warnings.push("Claude Desktop passes --profile through inferenceCredentialHelperArgs, which needs a recent release. Codex and other harnesses that run the helper bare use a copy of the binary named " + c.namedBinary + " instead; the steps say where to put it.");
+        }
+        return { problems: problems, warnings: warnings };
+    }
+
+    function minValid(c) {
+        // Keep the helper's minimum validity above the harness cache: TTL plus one minute, in whole minutes.
+        return (Math.ceil(c.ttl / 60) + 1) + "m";
+    }
+
+    function needsConfigFile(c) {
+        return c.provider === "custom" || (c.provider === "entra" && !!c.tenant) ||
+            (c.provider === "google" && !!c.hd) || c.ttl >= 300;
+    }
+
+    // ----- Encoders -----
+
+    function regString(v) { return '"' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"'; }
+
+    function xml(v) {
+        return String(v).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+
+    // TOML basic string: backslashes and quotes escaped.
+    function tomlString(v) { return '"' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"'; }
+
+    // Shell word for the command snippets.
+    function shellWord(v) { return /^[A-Za-z0-9_\/.:=+-]+$/.test(v) ? v : "'" + v.replace(/'/g, "'\\''") + "'"; }
+
+    // ----- Claude Desktop -----
+
+    // Returns [key, value] pairs. Every value is a string: Claude Desktop reads integers,
+    // booleans and JSON arrays from strings in both the registry and a profile.
+    function desktopSettings(c, os) {
+        var s = [
+            ["inferenceProvider", "gateway"],
+            ["inferenceGatewayBaseUrl", c.gateway],
+            ["inferenceCredentialKind", "helper-script"],
+            ["inferenceCredentialHelper", c.path[os]]
+        ];
+        if (os === "windows") { s.push(["inferenceCredentialHelperWindows", c.path.windows]); }
+        if (c.args.length) { s.push(["inferenceCredentialHelperArgs", JSON.stringify(c.args)]); }
+        s.push(["inferenceCredentialHelperTtlSec", String(c.ttl)]);
+        s.push(["inferenceCredentialHelperTimeoutSec", String(c.timeout)]);
+        return s;
+    }
+
+    var INTEGER_KEYS = { inferenceCredentialHelperTtlSec: true, inferenceCredentialHelperTimeoutSec: true };
+
+    function regDword(n) { return "dword:" + ("00000000" + Number(n).toString(16)).slice(-8); }
+
+    function genReg(c) {
+        var hive = c.hive === "HKLM" ? "HKEY_LOCAL_MACHINE" : "HKEY_CURRENT_USER";
+        var lines = ["Windows Registry Editor Version 5.00", "", "[" + hive + "\\SOFTWARE\\Policies\\Claude]"];
+        desktopSettings(c, "windows").forEach(function (kv) {
+            var value = INTEGER_KEYS[kv[0]] && c.regInts === "dword" ? regDword(kv[1]) : regString(kv[1]);
+            lines.push(regString(kv[0]) + "=" + value);
+        });
+        // Registry files are CRLF; an empty last line is conventional.
+        return lines.join("\r\n") + "\r\n";
+    }
+
+    function plistDict(pairs, indent) {
+        var out = [];
+        pairs.forEach(function (kv) {
+            out.push(indent + "<key>" + xml(kv[0]) + "</key>");
+            out.push(indent + "<string>" + xml(kv[1]) + "</string>");
+        });
+        return out.join("\n");
+    }
+
+    var PLIST_HEAD = '<?xml version="1.0" encoding="UTF-8"?>\n' +
+        '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n' +
+        '<plist version="1.0">\n';
+
+    function genPlist(c) {
+        return PLIST_HEAD + "<dict>\n" + plistDict(desktopSettings(c, "macos"), "\t") + "\n</dict>\n</plist>\n";
+    }
+
+    function genMobileconfig(c, uuids) {
+        var prefix = c.prefix || "com.example";
+        var org = c.org || "Example Organization";
+        var name = "Claude Desktop gateway settings";
+        return PLIST_HEAD +
+            "<dict>\n" +
+            "\t<key>PayloadContent</key>\n" +
+            "\t<array>\n" +
+            "\t\t<dict>\n" +
+            plistDict(desktopSettings(c, "macos"), "\t\t\t") + "\n" +
+            "\t\t\t<key>PayloadDisplayName</key>\n" +
+            "\t\t\t<string>" + xml(name) + "</string>\n" +
+            "\t\t\t<key>PayloadIdentifier</key>\n" +
+            "\t\t\t<string>" + xml(prefix + ".claude-desktop-gateway.payload") + "</string>\n" +
+            "\t\t\t<key>PayloadType</key>\n" +
+            "\t\t\t<string>com.anthropic.claudefordesktop</string>\n" +
+            "\t\t\t<key>PayloadUUID</key>\n" +
+            "\t\t\t<string>" + uuids.payload + "</string>\n" +
+            "\t\t\t<key>PayloadVersion</key>\n" +
+            "\t\t\t<integer>1</integer>\n" +
+            "\t\t</dict>\n" +
+            "\t</array>\n" +
+            "\t<key>PayloadDescription</key>\n" +
+            "\t<string>" + xml("Sends Claude Desktop model traffic through " + c.gateway + " using " + c.path.macos + " as the credential helper.") + "</string>\n" +
+            "\t<key>PayloadDisplayName</key>\n" +
+            "\t<string>" + xml(name) + "</string>\n" +
+            "\t<key>PayloadIdentifier</key>\n" +
+            "\t<string>" + xml(prefix + ".claude-desktop-gateway") + "</string>\n" +
+            "\t<key>PayloadOrganization</key>\n" +
+            "\t<string>" + xml(org) + "</string>\n" +
+            "\t<key>PayloadScope</key>\n" +
+            "\t<string>System</string>\n" +
+            "\t<key>PayloadType</key>\n" +
+            "\t<string>Configuration</string>\n" +
+            "\t<key>PayloadUUID</key>\n" +
+            "\t<string>" + uuids.profile + "</string>\n" +
+            "\t<key>PayloadVersion</key>\n" +
+            "\t<integer>1</integer>\n" +
+            "</dict>\n</plist>\n";
+    }
+
+    // Linux reads real JSON, so integers and arrays are native values.
+    function genLinuxManaged(c) {
+        var o = {
+            inferenceProvider: "gateway",
+            inferenceGatewayBaseUrl: c.gateway,
+            inferenceCredentialKind: "helper-script",
+            inferenceCredentialHelper: c.path.linux
+        };
+        if (c.args.length) { o.inferenceCredentialHelperArgs = c.args; }
+        o.inferenceCredentialHelperTtlSec = c.ttl;
+        o.inferenceCredentialHelperTimeoutSec = c.timeout;
+        return JSON.stringify(o, null, 2) + "\n";
+    }
+
+    // ----- agw-token.json -----
+
+    function genConfigJSON(c) {
+        var profiles = {};
+        var p = {};
+        if (c.provider === "entra") {
+            p.provider = "entra";
+            if (c.tenant) { p.tenant = c.tenant; }
+            profiles["default"] = p;
+        } else if (c.provider === "google") {
+            p.provider = "google";
+            if (c.hd) { p["extra-auth-params"] = { hd: c.hd }; }
+            profiles["default"] = p;
+        } else {
+            p.issuer = c.issuer;
+            p["client-id"] = c.clientId;
+            p.scopes = c.scopes.split(/[\s,]+/).filter(Boolean);
+            if (c.redirectPort) { p["redirect-port"] = c.redirectPort; }
+            profiles[c.profile] = p;
+        }
+        if (c.ttl >= 300) { p["min-valid"] = minValid(c); }
+        return JSON.stringify({ profiles: profiles }, null, 2) + "\n";
+    }
+
+    // ----- Claude Code -----
+
+    function helperCommand(c) {
+        // The install directory is on PATH, so the bare name works on every platform.
+        return [c.binary].concat(c.args).join(" ");
+    }
+
+    function genClaudeCodeSettings(c) {
+        return JSON.stringify({
+            apiKeyHelper: helperCommand(c),
+            env: {
+                ANTHROPIC_BASE_URL: c.gateway,
+                CLAUDE_CODE_API_KEY_HELPER_TTL_MS: String(c.ttl * 1000)
+            }
+        }, null, 2) + "\n";
+    }
+
+    function genMcpJSON(c) {
+        return JSON.stringify({
+            mcpServers: {
+                gateway: {
+                    type: "http",
+                    url: c.mcpUrl,
+                    headersHelper: helperCommand(c) + " --output headers"
+                }
+            }
+        }, null, 2) + "\n";
+    }
+
+    // ----- Codex -----
+
+    function genCodex(c, os) {
+        // Codex runs the command without arguments, so a profile uses the named binary.
+        var cmd = os === "windows"
+            ? "'" + c.namedPath.windows + "'"   // literal TOML string keeps the backslashes
+            : tomlString(c.namedPath[os]);
+        return [
+            'model_provider = "gateway"',
+            "",
+            "[model_providers.gateway]",
+            'name = "Agent Gateway"',
+            "base_url = " + tomlString(c.gateway + "/v1"),
+            'wire_api = "responses"',
+            "",
+            "[model_providers.gateway.auth]",
+            "command = " + cmd,
+            "timeout_ms = " + (c.timeout * 1000),
+            "refresh_interval_ms = " + (c.ttl * 1000),
+            ""
+        ].join("\n");
+    }
+
+    // ----- Other harnesses -----
+
+    function genCommands(c, os) {
+        var bare = c.namedPath[os];
+        var withArgs = [c.path[os]].concat(c.args);
+        var q = quoteFor(os);
+        var lines = [
+            "# Bearer token on stdout (harnesses that run the helper without arguments)",
+            q(bare),
+            "",
+            "# The same, selecting the configuration with arguments",
+            withArgs.map(q).join(" "),
+            "",
+            "# HTTP headers as JSON, for MCP header helpers",
+            withArgs.map(q).concat(["--output", "headers"]).join(" "),
+            "",
+            "# Sign in once, and inspect what is stored (the command goes before the flags)",
+            [q(c.path[os]), "login"].concat(c.args).join(" "),
+            [q(c.path[os]), "status"].concat(c.args).join(" "),
+            ""
+        ];
+        return lines.join("\n");
+    }
+
+    // ----- Syntax highlighting -----
+
+    // Ordered [pattern, class] pairs per language; the first pattern that matches at a
+    // position wins. Patterns must not contain capturing groups.
+    var STR_DQ = '"(?:[^"\\\\\\n]|\\\\.)*"';
+    var LANGS = {
+        json: [
+            [STR_DQ + "(?=\\s*:)", "tk-key"],
+            [STR_DQ, "tk-str"],
+            ["-?\\b\\d+(?:\\.\\d+)?\\b|\\b(?:true|false|null)\\b", "tk-num"]
+        ],
+        toml: [
+            ["#[^\\n]*", "tk-cmt"],
+            ["^\\[[^\\]\\n]*\\]", "tk-sec"],
+            ["^[A-Za-z0-9_.-]+(?=\\s*=)", "tk-key"],
+            [STR_DQ + "|'[^'\\n]*'", "tk-str"],
+            ["\\b\\d+\\b", "tk-num"]
+        ],
+        xml: [
+            ["<!--[\\s\\S]*?-->", "tk-cmt"],
+            ["<[?!][^>]*>", "tk-cmt"],
+            ["(?<=<key>)[^<]+(?=</key>)", "tk-key"],
+            ["(?<=<integer>)[^<]+(?=</integer>)", "tk-num"],
+            ["(?<=>)[^<\\n]+(?=<)", "tk-str"],
+            ["</?[A-Za-z][^>]*>", "tk-tag"]
+        ],
+        reg: [
+            ["^Windows Registry Editor[^\\n]*", "tk-cmt"],
+            ["^\\[[^\\]\\n]*\\]", "tk-sec"],
+            ["^" + STR_DQ + "(?==)", "tk-key"],
+            ["dword:[0-9A-Fa-f]{8}", "tk-num"],
+            [STR_DQ, "tk-str"]
+        ],
+        shell: [
+            ["(?:#|^(?:rem|REM)\\b)[^\\n]*", "tk-cmt"],
+            [STR_DQ + "|'(?:[^'\\n])*'", "tk-str"],
+            ["(?<=^|\\s)--?[A-Za-z][\\w-]*", "tk-key"]
+        ]
+    };
+    var compiled = {};
+
+    function highlight(text, lang) {
+        var rules = LANGS[lang];
+        if (!rules) { return xml(text); }
+        if (!compiled[lang]) {
+            compiled[lang] = new RegExp(rules.map(function (r) { return "(" + r[0] + ")"; }).join("|"), "gm");
+        }
+        var re = compiled[lang], out = "", last = 0, m;
+        re.lastIndex = 0;
+        while ((m = re.exec(text)) !== null) {
+            if (m[0] === "") { re.lastIndex++; continue; }
+            out += xml(text.slice(last, m.index));
+            var cls = "";
+            for (var i = 1; i < m.length; i++) { if (m[i] !== undefined) { cls = rules[i - 1][1]; break; } }
+            out += '<span class="' + cls + '">' + xml(m[0]) + "</span>";
+            last = m.index + m[0].length;
+        }
+        return out + xml(text.slice(last));
+    }
+
+    var LANG_FOR = { reg: "reg", mobileconfig: "xml", plist: "xml", json: "json", toml: "toml", sh: "shell", cmd: "shell" };
+
+    function langOf(file) { return LANG_FOR[file.split(".").pop()] || ""; }
+
+    // ----- Destinations and steps -----
+
+    var CONFIG_DIR = {
+        windows: "%APPDATA%\\agw-token\\",
+        macos: "~/Library/Application Support/agw-token/",
+        linux: "~/.config/agw-token/"
+    };
+    var HOME = { windows: "%USERPROFILE%\\", macos: "~/", linux: "~/" };
+
+    function installStep(c, os) {
+        if (os === "windows") {
+            return "Install the MSI from the <a href=\"https://github.com/nversion/agent-gateway-token-helper/releases\">releases page</a>. It puts the executables in <code>" + xml(c.dir.windows) + "</code> and adds that directory to <code>PATH</code>.";
+        }
+        var archive = os === "macos" ? "Unzip the macOS release" : "Extract the Linux tarball";
+        return archive + " from the <a href=\"https://github.com/nversion/agent-gateway-token-helper/releases\">releases page</a> and move the binaries to <code>" + xml(c.dir[os]) + "</code>.";
+    }
+
+    function namedBinaryStep(c, os) {
+        if (c.provider === "custom") {
+            var src = c.path[os], dst = c.namedPath[os];
+            return os === "windows"
+                ? "Copy <code>" + xml(src) + "</code> to <code>" + xml(dst) + "</code>, so the helper selects the <code>" + xml(c.profile) + "</code> profile without arguments."
+                : "Create <code>" + xml(dst) + "</code> as a symlink or copy of <code>" + xml(src) + "</code>: <code>ln -s " + xml(shellWord(src)) + " " + xml(shellWord(dst)) + "</code>. It selects the <code>" + xml(c.profile) + "</code> profile without arguments.";
+        }
+        return null;
+    }
+
+    function configStep(c, os) {
+        if (!needsConfigFile(c)) { return null; }
+        return "Save <code>agw-token.json</code> (agw-token.json tab) in <code>" + xml(c.dir[os]) + "</code> for every user, or in <code>" + xml(CONFIG_DIR[os]) + "</code> for one user.";
+    }
+
+    function quoteFor(os) {
+        return os === "windows"
+            ? function (v) { return /\s/.test(v) ? '"' + v + '"' : v; }
+            : shellWord;
+    }
+
+    function loginStep(c, os, named) {
+        var q = quoteFor(os);
+        var parts = named ? [q(c.namedPath[os]), "login"] : [q(c.path[os]), "login"].concat(c.args);
+        return "Sign in once from a terminal as the user who runs the harness: <code>" + xml(parts.join(" ")) + "</code>.";
+    }
+
+    function compact(list) { return list.filter(function (s) { return !!s; }); }
+
+    // Each card is one file (or snippet) for one platform.
+    function cards(c, uuids) {
+        var out = [];
+
+        // Claude Desktop
+        out.push({
+            harness: "desktop", os: "windows", file: "claude-gateway.reg", mime: "text/plain",
+            dest: (c.hive === "HKLM" ? "HKLM" : "HKCU") + "\\SOFTWARE\\Policies\\Claude (imported with reg import or Group Policy)",
+            content: genReg(c),
+            steps: compact([
+                installStep(c, "windows"),
+                configStep(c, "windows"),
+                loginStep(c, "windows"),
+                c.hive === "HKLM"
+                    ? "Import <code>claude-gateway.reg</code> as administrator (double-click it, or <code>reg import claude-gateway.reg</code> from an elevated prompt). Group Policy and Intune can write the same values."
+                    : "Import <code>claude-gateway.reg</code> as that user (double-click it, or <code>reg import claude-gateway.reg</code>). Nothing may be set under <code>HKLM\\SOFTWARE\\Policies\\Claude</code>, or these values are ignored.",
+                "Allow <code>downloads.claude.ai</code> through the firewall, install Claude Desktop (MSIX) and start it. The sign-in screen offers Claude Desktop on 3P."
+            ])
+        });
+        out.push({
+            harness: "desktop", os: "macos", file: "claude-desktop-gateway.mobileconfig", mime: "application/x-apple-aspen-config",
+            dest: "Your MDM, as a custom configuration profile. Without MDM: double-click it and approve it under System Settings > General > Device Management.",
+            content: genMobileconfig(c, uuids),
+            steps: compact([
+                installStep(c, "macos") + " They are signed and notarized, so there is no Gatekeeper prompt.",
+                configStep(c, "macos"),
+                loginStep(c, "macos"),
+                "Upload the profile to Jamf, Kandji, Mosyle, Intune or another Apple MDM and scope it to the devices. It lands in <code>/Library/Managed Preferences/com.anthropic.claudefordesktop.plist</code>.",
+                "To test without an MDM, double-click the profile and approve it under System Settings &gt; General &gt; Device Management (admin password required). Remove it there to go back; while it is installed the in-app configuration window is read-only.",
+                "Install Claude Desktop and start it. Settings are read at launch, so quit and reopen the app after a change."
+            ])
+        });
+        out.push({
+            harness: "desktop", os: "macos", file: "com.anthropic.claudefordesktop.plist", mime: "application/xml",
+            dest: "The payload of your MDM's custom settings, preference domain com.anthropic.claudefordesktop. Prefer the .mobileconfig above when the MDM accepts one.",
+            content: genPlist(c),
+            steps: compact([
+                "Same steps as the .mobileconfig; this is only the inner payload for MDMs that ask for a plist and domain, such as Jamf's Application &amp; Custom Settings.",
+                "For a throwaway test without an MDM or profile, copy it straight into the managed preferences and restart the preferences daemon: <code>sudo cp com.anthropic.claudefordesktop.plist /Library/Managed\\ Preferences/ &amp;&amp; sudo killall cfprefsd</code>. The daemon can overwrite or ignore a hand-placed file, so use the .mobileconfig for anything longer-lived, and <code>sudo rm</code> the file to undo.",
+                "The other way to test without an MDM is the in-app window: Help &gt; Troubleshooting &gt; Enable Developer Mode, then Developer &gt; Configure Third-Party Inference, enter these values and Apply Changes. That writes a local, user-editable configuration instead of a managed one."
+            ])
+        });
+        out.push({
+            harness: "desktop", os: "linux", file: "managed-settings.json", mime: "application/json",
+            dest: "/etc/claude-desktop/managed-settings.json",
+            content: genLinuxManaged(c),
+            steps: compact([
+                installStep(c, "linux"),
+                configStep(c, "linux"),
+                loginStep(c, "linux"),
+                "Install the file as root: <code>sudo install -d -m 755 -o root /etc/claude-desktop &amp;&amp; sudo install -m 644 -o root managed-settings.json /etc/claude-desktop/</code>. Claude Desktop rejects the file when it, or the directory, is a symlink or writable by anyone but root.",
+                "Install Claude Desktop and start it. Rejected files are logged in <code>~/.config/Claude/logs/main.log</code>."
+            ])
+        });
+
+        // Claude Code: one file per platform, same content, different location.
+        ["windows", "macos", "linux"].forEach(function (os) {
+            out.push({
+                harness: "code", os: os, file: "settings.json", mime: "application/json",
+                dest: HOME[os] + ".claude" + (os === "windows" ? "\\" : "/") + "settings.json (merge into an existing file)",
+                content: genClaudeCodeSettings(c),
+                steps: compact([
+                    installStep(c, os),
+                    configStep(c, os),
+                    loginStep(c, os),
+                    "Merge the keys into your settings file. Claude Code runs <code>" + xml(helperCommand(c)) + "</code> from <code>PATH</code> and reuses the token for " + c.ttl + " seconds."
+                ])
+            });
+            if (c.mcpUrl) {
+                out.push({
+                    harness: "code", os: os, file: ".mcp.json", mime: "application/json",
+                    dest: "The project root (shared with the project), or merge mcpServers into " + HOME[os] + ".claude.json for all projects",
+                    content: genMcpJSON(c),
+                    steps: [
+                        "Claude Code gives the headers helper only 10 seconds, so sign in from a terminal before connecting.",
+                        "After a new sign-in, reconnect the server with <code>/mcp</code>."
+                    ]
+                });
+            }
+        });
+
+        // Codex: command path differs per platform.
+        ["windows", "macos", "linux"].forEach(function (os) {
+            out.push({
+                harness: "codex", os: os, file: "config.toml", mime: "application/toml",
+                dest: HOME[os] + ".codex" + (os === "windows" ? "\\" : "/") + "config.toml (merge into an existing file)",
+                content: genCodex(c, os),
+                steps: compact([
+                    installStep(c, os),
+                    configStep(c, os),
+                    namedBinaryStep(c, os),
+                    loginStep(c, os, true),
+                    "Merge the tables into your Codex config. The gateway must route the OpenAI Responses API under <code>/v1/responses</code>.",
+                    "Don't combine the <code>auth</code> table with <code>env_key</code> or <code>requires_openai_auth</code>."
+                ])
+            });
+        });
+
+        // Other harnesses: commands to paste, not a file.
+        ["windows", "macos", "linux"].forEach(function (os) {
+            out.push({
+                harness: "other", os: os, file: "commands" + (os === "windows" ? ".cmd" : ".sh"), mime: "text/plain", snippet: true,
+                dest: "Wherever the harness takes a credential command",
+                content: genCommands(c, os),
+                steps: compact([
+                    installStep(c, os),
+                    configStep(c, os),
+                    namedBinaryStep(c, os),
+                    loginStep(c, os, true),
+                    "Set the harness's credential cache below <code>min-valid</code>" + (c.ttl >= 300 ? " (" + minValid(c) + " with this agw-token.json)" : " (5 minutes by default)") + " and its command timeout high enough for a browser sign-in, or sign in from a terminal first."
+                ])
+            });
+        });
+
+        // agw-token.json: same file everywhere, location differs.
+        if (needsConfigFile(c)) {
+            ["windows", "macos", "linux"].forEach(function (os) {
+                out.push({
+                    harness: "json", os: os, file: "agw-token.json", mime: "application/json",
+                    dest: c.dir[os] + (os === "windows" ? "\\" : "/") + "agw-token.json for every user, or " + CONFIG_DIR[os] + "agw-token.json for one user",
+                    content: genConfigJSON(c),
+                    steps: [
+                        "The file next to the binary wins over the user's own. <code>agw-token status</code> lists the files it read.",
+                        c.provider === "custom"
+                            ? "Register <code>" + xml(c.clientId || "the client") + "</code> at your provider as a public client with PKCE and redirect URI <code>http://localhost" + (c.redirectPort ? ":" + c.redirectPort.replace("+", "") : "") + "/callback</code>."
+                            : "Delete it again to go back to the preset defaults."
+                    ]
+                });
+            });
+        }
+        return out;
+    }
+
+    var HARNESSES = [
+        { id: "desktop", label: "Claude Desktop", intro: "Managed settings for Claude Desktop on third-party inference. Values are strings, as Claude Desktop expects in a profile or the registry." },
+        { id: "code", label: "Claude Code", intro: "Claude Code reads the gateway URL and the API key helper from its user settings; MCP servers behind the gateway use a headers helper." },
+        { id: "codex", label: "Codex", intro: "Codex runs the credential command without arguments, so a profile is selected by the binary's name." },
+        { id: "other", label: "Other harnesses", intro: "Any harness that can run a command for its credential. The commands print the token, or HTTP headers as JSON." },
+        { id: "json", label: "agw-token.json", intro: "Settings agw-token itself needs for the chosen provider. Not needed for the plain presets." }
+    ];
+
+    return {
+        OS: OS, HARNESSES: HARNESSES,
+        derive: derive, validate: validate, needsConfigFile: needsConfigFile, cards: cards, xml: xml,
+        highlight: highlight, langOf: langOf,
+        gen: { reg: genReg, plist: genPlist, mobileconfig: genMobileconfig, linux: genLinuxManaged,
+            config: genConfigJSON, claudeCode: genClaudeCodeSettings, mcp: genMcpJSON, codex: genCodex, commands: genCommands }
+    };
+})();
+
+if (typeof module !== "undefined" && module.exports) { module.exports = AGW; }
+
+if (typeof document !== "undefined") {
+(function () {
+    "use strict";
+
+    var $ = function (id) { return document.getElementById(id); };
+    var STORAGE_KEY = "agw-harness-setup";
+    var FIELDS = {
+        gateway: "gateway", mcpUrl: "mcp-url", tenant: "tenant", hd: "hd", profile: "profile", issuer: "issuer",
+        clientId: "client-id", scopes: "scopes", redirectPort: "redirect-port", winDir: "win-dir", macDir: "mac-dir",
+        linuxDir: "linux-dir", hive: "hive", regInts: "reg-ints", ttl: "ttl", timeout: "timeout", org: "org", prefix: "prefix"
+    };
+    var state = { harness: "desktop", platform: "all" };
+    var contents = {};
+
+    // Stable for the page's lifetime so a re-download does not produce a different profile.
+    var uuids = { profile: uuid(), payload: uuid() };
+
+    function uuid() {
+        if (window.crypto && crypto.randomUUID) { return crypto.randomUUID().toUpperCase(); }
+        var b = new Uint8Array(16);
+        if (window.crypto && crypto.getRandomValues) { crypto.getRandomValues(b); }
+        else { for (var i = 0; i < 16; i++) { b[i] = Math.floor(Math.random() * 256); } }
+        b[6] = (b[6] & 0x0f) | 0x40;
+        b[8] = (b[8] & 0x3f) | 0x80;
+        var h = Array.prototype.map.call(b, function (x) { return ("0" + x.toString(16)).slice(-2); }).join("");
+        return (h.slice(0, 8) + "-" + h.slice(8, 12) + "-" + h.slice(12, 16) + "-" + h.slice(16, 20) + "-" + h.slice(20)).toUpperCase();
+    }
+
+    function readForm() {
+        var f = { provider: document.querySelector('input[name="provider"]:checked').value };
+        Object.keys(FIELDS).forEach(function (k) { f[k] = $(FIELDS[k]).value; });
+        return f;
+    }
+
+    function buildControls() {
+        var tabs = $("tabs");
+        AGW.HARNESSES.forEach(function (h) {
+            var b = document.createElement("button");
+            b.type = "button"; b.setAttribute("role", "tab"); b.id = "tab-" + h.id; b.textContent = h.label;
+            b.addEventListener("click", function () { state.harness = h.id; render(); });
+            tabs.appendChild(b);
+        });
+        var chips = $("platforms");
+        [["all", "All"], ["windows", "Windows"], ["macos", "macOS"], ["linux", "Linux"]].forEach(function (p) {
+            var b = document.createElement("button");
+            b.type = "button"; b.id = "platform-" + p[0]; b.textContent = p[1];
+            b.addEventListener("click", function () { state.platform = p[0]; render(); });
+            chips.appendChild(b);
+        });
+        $("cards").addEventListener("click", function (e) {
+            var b = e.target.closest("button");
+            if (!b) { return; }
+            if (b.dataset.copy) { copy(b.dataset.copy, b); }
+            if (b.dataset.download) { download(b.dataset.download, b.dataset.file, b.dataset.mime); }
+        });
+    }
+
+    function render() {
+        var f = readForm();
+        var c = AGW.derive(f);
+        var v = AGW.validate(c);
+        var ok = v.problems.length === 0;
+        var needJSON = AGW.needsConfigFile(c);
+
+        $("entra-opts").classList.toggle("hidden", c.provider !== "entra");
+        $("google-opts").classList.toggle("hidden", c.provider !== "google");
+        $("custom-opts").classList.toggle("hidden", c.provider !== "custom");
+
+        showList($("problems"), v.problems, "Fix these before using the files:");
+        showList($("warnings"), v.warnings, "Note:");
+
+        if (state.harness === "json" && !needJSON) { state.harness = "desktop"; }
+        AGW.HARNESSES.forEach(function (h) {
+            var tab = $("tab-" + h.id);
+            tab.setAttribute("aria-selected", h.id === state.harness ? "true" : "false");
+            tab.classList.toggle("hidden", h.id === "json" && !needJSON);
+            if (h.id === state.harness) { $("intro").textContent = h.intro; }
+        });
+        ["all", "windows", "macos", "linux"].forEach(function (p) {
+            $("platform-" + p).setAttribute("aria-pressed", p === state.platform ? "true" : "false");
+        });
+
+        var box = $("cards");
+        box.textContent = "";
+        contents = {};
+        if (!ok) {
+            box.innerHTML = '<p class="empty">Fill in the form to generate the files.</p>';
+            save(f);
+            return;
+        }
+        var list = AGW.cards(c, uuids).filter(function (k) {
+            return k.harness === state.harness && (state.platform === "all" || k.os === state.platform);
+        });
+        list.forEach(function (k, i) {
+            var id = state.harness + "-" + i;
+            contents[id] = k.content;
+            var el = document.createElement("article");
+            el.className = "card";
+            el.innerHTML =
+                '<div class="card-head"><h3><code>' + AGW.xml(k.file) + '</code><span class="os">' + AGW.OS[k.os].label + '</span></h3>' +
+                '<div class="btns"><button type="button" class="btn" data-copy="' + id + '">Copy</button>' +
+                (k.snippet ? "" : '<button type="button" class="btn primary" data-download="' + id + '" data-file="' + AGW.xml(k.file) + '" data-mime="' + k.mime + '">Download</button>') +
+                '</div></div>' +
+                '<p class="dest"><strong>Where:</strong> <code>' + AGW.xml(k.dest) + '</code></p>' +
+                '<pre><code></code></pre>' +
+                '<ol class="steps">' + k.steps.map(function (s) { return "<li>" + s + "</li>"; }).join("") + "</ol>";
+            el.querySelector("pre code").innerHTML = AGW.highlight(k.content, AGW.langOf(k.file));
+            box.appendChild(el);
+        });
+        save(f);
+    }
+
+    function showList(el, items, title) {
+        el.classList.toggle("hidden", items.length === 0);
+        if (!items.length) { return; }
+        el.innerHTML = "<strong>" + title + "</strong><ul>" + items.map(function (s) { return "<li>" + AGW.xml(s) + "</li>"; }).join("") + "</ul>";
+    }
+
+    function copy(id, button) {
+        var text = contents[id];
+        if (!text) { return; }
+        var done = function () { var old = button.textContent; button.textContent = "Copied"; setTimeout(function () { button.textContent = old; }, 1200); };
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(done, function () { fallbackCopy(text); done(); });
+        } else { fallbackCopy(text); done(); }
+    }
+
+    function fallbackCopy(text) {
+        var ta = document.createElement("textarea");
+        ta.value = text; ta.className = "sr";
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand("copy"); } catch (e) { /* nothing more to try */ }
+        document.body.removeChild(ta);
+    }
+
+    function download(id, file, mime) {
+        var text = contents[id];
+        if (!text) { return; }
+        var blob = new Blob([text], { type: mime + ";charset=utf-8" });
+        var a = document.createElement("a");
+        a.href = URL.createObjectURL(blob); a.download = file;
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+    }
+
+    // Per-browser convenience only; the page works without storage.
+    function save(f) {
+        try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ form: f, state: state })); } catch (e) { /* unavailable */ }
+    }
+
+    function load() {
+        try {
+            var data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+            if (!data || !data.form) { return; }
+            Object.keys(FIELDS).forEach(function (k) { if (typeof data.form[k] === "string") { $(FIELDS[k]).value = data.form[k]; } });
+            var r = document.querySelector('input[name="provider"][value="' + data.form.provider + '"]');
+            if (r) { r.checked = true; }
+            if (data.state && data.state.harness) { state.harness = data.state.harness; }
+            if (data.state && data.state.platform) { state.platform = data.state.platform; }
+        } catch (e) { /* ignore */ }
+    }
+
+    $("reset").addEventListener("click", function () {
+        try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* ignore */ }
+        $("form").reset();
+        state = { harness: "desktop", platform: "all" };
+        render();
+    });
+
+    buildControls();
+    load();
+    $("form").addEventListener("input", render);
+    $("form").addEventListener("change", render);
+    render();
+})();
+}
+</script>
+</body>
+</html>

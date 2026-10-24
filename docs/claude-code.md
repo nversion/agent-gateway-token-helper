@@ -1,7 +1,8 @@
 # Claude Code
 
 Claude Code can get its API key and its MCP server headers from a command. Model
-credentials and MCP server definitions use different configuration files.
+credentials and MCP server definitions use different configuration files. The
+[setup generator](https://nversion.dk/agent-gateway-token-helper/) fills in both.
 
 ## Model traffic through the gateway
 

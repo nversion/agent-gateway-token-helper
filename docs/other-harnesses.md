@@ -18,4 +18,6 @@ these ways:
 
 Set the harness's credential cache lifetime below `min-valid`; 4 minutes works with
 the default 5 minutes. Check its command timeout and sign in from a terminal first if
-it cannot wait for browser authentication.
+it cannot wait for browser authentication. The
+[setup generator](https://nversion.dk/agent-gateway-token-helper/) prints the commands
+with the right path and arguments for each platform.

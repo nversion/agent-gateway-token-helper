@@ -48,7 +48,15 @@ MSI finds and replaces an installed one.
 
 `README.md` is a short intro; link to other files with relative paths. Harness setup lives in `docs/` (one file
 per harness), configuration reference in `docs/configuration.md`, and building, CI,
-verification, releasing and signing in `DEVELOPMENT.md`. Never put real signing values
+verification, releasing and signing in `DEVELOPMENT.md`.
+
+`docs/` is also the GitHub Pages site (https://nversion.dk/agent-gateway-token-helper/),
+published by `.github/workflows/pages.yaml` on every push to `main` that touches it.
+`docs/index.html` is the setup generator: a single file with no external scripts, fonts or
+build step, so the workflow uploads `docs/` as it is. When a harness doc changes what a
+file must contain, change the generator too; `scripts/check-generator.mjs` (run by
+`scripts/linting.sh` and by the Pages workflow before deploying) checks its output, so
+keep the generators in the `AGW` object free of DOM access. Never put real signing values
 (Apple identity, notary profile, Azure account or profile) in the repository; the docs
 use placeholders and show how to look them up.
 

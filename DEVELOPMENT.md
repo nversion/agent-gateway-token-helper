@@ -66,6 +66,21 @@ The native store test is opt-in because it touches your own secret store.
 `scripts/linting.sh` also vets and lints with `GOOS=windows` and `GOOS=linux`, since
 `internal/store`, `internal/lock` and `internal/browser` have per-OS files.
 
+The setup generator at `docs/index.html` is checked by `scripts/check-generator.mjs`
+(Node, no packages), which `scripts/linting.sh` runs when `node` is installed. It
+generates every file for a few configurations and validates them; on macOS it also lints
+the plists with `plutil`. Pass `--write <dir>` to look at the files it produces.
+`docs/` is published to GitHub Pages by `.github/workflows/pages.yaml`, which runs the
+check and then uploads the folder with `actions/upload-pages-artifact` and publishes it
+with `actions/deploy-pages`, like the root site in `nversion/nversion.github.io`. It runs
+on pushes to `main` that touch `docs/`, and can be started by hand from the Actions tab.
+The repository's Pages source has to be "GitHub Actions" once, set under Settings >
+Pages or with:
+
+```sh
+gh api -X POST repos/nversion/agent-gateway-token-helper/pages -f build_type=workflow
+```
+
 `cmd/fake-oidc` runs the test provider as a standalone server. It signs in
 `alice@example.com` without showing a login page:
 
