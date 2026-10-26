@@ -734,6 +734,9 @@ var AGW = (function () {
         if (os === "windows") {
             return "Install the MSI from the <a href=\"https://github.com/nversion/agent-gateway-token-helper/releases\">releases page</a>. It puts the executables in <code>" + xml(c.dir.windows) + "</code> and adds that directory to <code>PATH</code>.";
         }
+        if (os === "macos" && c.dir.macos === "/usr/local/bin") {
+            return "Install the PKG from the <a href=\"https://github.com/nversion/agent-gateway-token-helper/releases\">releases page</a>. It puts the executables in <code>/usr/local/bin</code>.";
+        }
         var archive = os === "macos" ? "Unzip the macOS release" : "Extract the Linux tarball";
         return archive + " from the <a href=\"https://github.com/nversion/agent-gateway-token-helper/releases\">releases page</a> and move the binaries to <code>" + xml(c.dir[os]) + "</code>.";
     }

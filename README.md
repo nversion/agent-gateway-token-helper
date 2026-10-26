@@ -15,9 +15,9 @@ others) can send to an [agentgateway](https://agentgateway.dev) instance. It wor
   the Azure CLI, so you don't need to register an app with your provider to get started.
 - `agw-token-google` and `agw-token-entra` select those providers without flags.
   Profiles and environment variables supply any further settings.
-- Release binaries are signed and notarized on macOS and signed with an MSI installer on
-  Windows, so they can be deployed through MDM in enterprise environments (see
-  [Install](#install)).
+- Release binaries are signed and notarized with a `.pkg` installer on macOS and signed
+  with an MSI installer on Windows, so they can be deployed through MDM in enterprise
+  environments (see [Install](#install)).
 
 ## Install
 
@@ -26,7 +26,7 @@ Download a prebuilt binary from the
 
 | OS | Archive | Signing |
 |---|---|---|
-| macOS | `agw-token-<version>-darwin-<arch>.zip` | Developer ID signed and notarized by Apple |
+| macOS | `agw-token-<version>-darwin-<arch>.pkg` installer, or `.zip` | Developer ID signed and notarized by Apple |
 | Windows | `agw-token-<version>-windows-<arch>.msi` installer, or `.zip` | Authenticode signed with Azure Artifact Signing |
 | Linux | `agw-token-<version>-linux-<arch>.tar.gz` | Not signed |
 
@@ -47,7 +47,9 @@ shasum -a 256 --check --ignore-missing SHA256SUMS
 Open a new terminal afterwards. Unattended installs and machine-wide configuration are
 covered in [Configuration](docs/configuration.md#windows-installer).
 
-**macOS:** extract the ZIP:
+**macOS:** the `.pkg` installs the executables into `/usr/local/bin`, which is already on
+`PATH`. Unattended installs are covered in
+[Configuration](docs/configuration.md#macos-installer). Or extract the ZIP:
 
 ```sh
 unzip 'agw-token-<version>-darwin-<arch>.zip'

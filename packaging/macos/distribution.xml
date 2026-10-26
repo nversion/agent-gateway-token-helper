@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Installer distribution for the agw-token macOS package, built by scripts/build-pkg.sh
+  with pkgbuild and productbuild.
+
+  Installs the three agw-token executables per machine into /usr/local/bin, and LICENSE
+  and README.md into /usr/local/share/agw-token. Tokens and user config stay per user, in
+  the Keychain and ~/Library/Application Support/agw-token.
+
+  The script fills in the release version (e.g. 1.2.3) and the hosts the package
+  installs on: arm64, or x86_64,arm64 for the Intel build, which Apple Silicon runs
+  through Rosetta.
+
+  The package identifier dk.nversion.agw-token must never change: it is what lets a newer
+  package replace an installed one in the receipt database (pkgutil).
+-->
+<installer-gui-script minSpecVersion="2">
+  <title>Agent Gateway helper @VERSION@</title>
+  <options customize="never" require-scripts="false" hostArchitectures="@ARCHS@" rootVolumeOnly="true" />
+  <domains enable_localSystem="true" />
+  <choices-outline>
+    <line choice="default">
+      <line choice="dk.nversion.agw-token" />
+    </line>
+  </choices-outline>
+  <choice id="default" />
+  <choice id="dk.nversion.agw-token" visible="false">
+    <pkg-ref id="dk.nversion.agw-token" />
+  </choice>
+  <pkg-ref id="dk.nversion.agw-token" version="@VERSION@" onConclusion="none">agw-token.pkg</pkg-ref>
+</installer-gui-script>

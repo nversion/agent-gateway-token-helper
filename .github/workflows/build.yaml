@@ -194,6 +194,64 @@ jobs:
                       throw "PATH entry left after uninstall: $(Get-MachinePath)"
                   }
 
+    # macOS installer packages from the CI binaries, to catch packaging errors on every
+    # change. Releases build theirs in scripts/release-sign.sh from the signed binaries.
+    # Installs the arm64 package, runs agw-token from the install directory, then
+    # removes it again and checks that the files and the receipt are gone.
+    pkg:
+        needs: build
+        permissions:
+            contents: read
+        runs-on: macos-latest
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v7
+            - name: Download binaries
+              uses: actions/download-artifact@v4
+              with:
+                  pattern: agw-token-darwin-*
+                  path: binaries
+            - name: Build packages
+              shell: bash
+              env:
+                  VERSION: ${{ github.ref_type == 'tag' && github.ref_name || '0.0.0' }}
+              run: |
+                  for goarch in amd64 arm64; do
+                      stage="$RUNNER_TEMP/stage-$goarch"
+                      mkdir -p "$stage"
+                      for variant in "" -google -entra; do
+                          cp "binaries/agw-token-darwin-$goarch/agw-token$variant-darwin-$goarch" "$stage/agw-token$variant"
+                      done
+                      cp LICENSE README.md "$stage/"
+                      scripts/build-pkg.sh "darwin-$goarch" "$VERSION" "$stage" "pkg/agw-token-darwin-$goarch.pkg"
+                  done
+            - name: Install, run and uninstall
+              shell: bash
+              run: |
+                  set -euo pipefail
+                  sudo installer -pkg pkg/agw-token-darwin-arm64.pkg -target /
+                  for exe in agw-token agw-token-google agw-token-entra; do
+                      [[ -x "/usr/local/bin/$exe" ]] || { echo "$exe not installed" >&2; exit 1; }
+                  done
+                  found="$(command -v agw-token)"
+                  [[ "$found" == /usr/local/bin/agw-token ]] || { echo "agw-token resolves to $found" >&2; exit 1; }
+                  agw-token version
+                  v="$(agw-token-google version)"
+                  [[ "$v" == *"default provider google"* ]] || { echo "agw-token-google version printed: $v" >&2; exit 1; }
+                  pkgutil --pkg-info dk.nversion.agw-token
+                  # Receipts list the files, which is how a package is removed by hand.
+                  pkgutil --only-files --files dk.nversion.agw-token | sed 's|^|/|' | sudo xargs rm -f
+                  sudo pkgutil --forget dk.nversion.agw-token
+                  if [[ -e /usr/local/bin/agw-token ]]; then echo "agw-token still exists after uninstall" >&2; exit 1; fi
+                  if pkgutil --pkg-info dk.nversion.agw-token 2>/dev/null; then echo "receipt left after uninstall" >&2; exit 1; fi
+            # Not named agw-token-*, which is reserved for the release binaries that
+            # scripts/release-download.sh fetches by name.
+            - name: Upload
+              uses: actions/upload-artifact@v4
+              with:
+                  name: pkg-darwin
+                  path: pkg/
+
     # Builds Linux and Windows twice, from different directories with empty build
     # caches, and fails if any binary differs: the release sums depend on it.
     reproducible:

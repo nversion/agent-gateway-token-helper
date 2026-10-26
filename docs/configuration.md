@@ -140,6 +140,26 @@ user of the machine. Its settings win over each user's own file (see
 [Where settings come from](#where-settings-come-from)), and upgrades and uninstalls leave
 it in place.
 
+## macOS installer
+
+The `.pkg` installs all three executables for every user of the machine, into
+`/usr/local/bin`, and `LICENSE` and `README.md` into `/usr/local/share/agw-token`.
+Installing needs administrator rights once; tokens and config stay per user. Installing a
+newer `.pkg` replaces the old version. The `arm64` package installs on Apple Silicon only;
+the `amd64` one also installs there and runs through Rosetta. For unattended installs,
+e.g. from an MDM:
+
+```sh
+sudo installer -pkg agw-token-1.2.3-darwin-arm64.pkg -target /
+```
+
+macOS keeps a receipt but has no uninstaller. To remove the files and the receipt:
+
+```sh
+pkgutil --only-files --files dk.nversion.agw-token | sed 's|^|/|' | sudo xargs rm -f
+sudo pkgutil --forget dk.nversion.agw-token
+```
+
 ## Executable name
 
 Renaming or copying the binary to `agw-token-<name>` (`agw-token-<name>.exe` on Windows)

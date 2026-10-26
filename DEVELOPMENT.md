@@ -99,6 +99,7 @@ The Build workflow (`.github/workflows/build.yaml`) runs on pushes to `main`, pu
 | `reproducible` | builds Linux and Windows twice and diffs the results |
 | `msi` | builds the unsigned `.msi` packages |
 | `msi-install` | installs and uninstalls one `.msi` on Windows |
+| `pkg` | builds the unsigned `.pkg` packages, installs and uninstalls one on macOS |
 
 The "Attest signed release" workflow (`.github/workflows/attest-signed.yaml`) is run by
 `scripts/release-upload.sh`. It rebuilds Linux and Windows from the tag, checks the
@@ -142,7 +143,8 @@ find msi -type f -name '*.exe' -exec go run ./cmd/verify-build SHA256SUMS-unsign
 
 macOS builds are not reproducible: they use cgo for the Keychain, and the C compiler and
 SDK version end up in the binary. Check those through their signature and notarization,
-and the build provenance attestation instead.
+and the build provenance attestation instead. The `.pkg` holds the same signed
+executables as the `.zip`; extract them with `pkgutil --expand-full` to compare.
 
 A full release from the public repository has GitHub attestations once the signing
 upload's attestation workflow succeeds. The Build workflow attests the unsigned CI
@@ -154,6 +156,8 @@ the manual signing operation. Partial uploads do not request attestations.
 gh attestation verify agw-token-1.2.3-darwin-arm64.zip --repo nversion/agent-gateway-token-helper
 codesign --verify --strict --verbose=2 agw-token     # after unzipping, macOS only
 spctl --assess --type install --verbose agw-token-1.2.3-darwin-arm64.zip
+pkgutil --check-signature agw-token-1.2.3-darwin-arm64.pkg
+spctl --assess --type install --verbose agw-token-1.2.3-darwin-arm64.pkg
 ```
 
 ## Releasing
@@ -175,7 +179,8 @@ binaries into `dist/v1.2.3/unsigned` and checks their attestations.
 scripts/release-download.sh v1.2.3
 ```
 
-**3. Sign and package.** This codesigns and notarizes the macOS binaries, signs the
+**3. Sign and package.** This codesigns and notarizes the macOS binaries, builds the
+`.pkg` installers from them and signs, notarizes and staples those too, signs the
 Windows ones with the vendored `tools/jsign-*.jar` through Azure Artifact Signing, builds
 the `.msi` installers from the signed executables and signs those too. Everything lands
 in `dist/v1.2.3/release`, with `SHA256SUMS` of the signed files and `SHA256SUMS-unsigned`
@@ -186,6 +191,7 @@ added a signature to the Windows binaries.
 az login
 scripts/release-sign.sh v1.2.3 \
     --apple-identity "Developer ID Application: <Organization> (<TEAMID>)" \
+    --apple-installer-identity "Developer ID Installer: <Organization> (<TEAMID>)" \
     --notary-profile <notary-profile> \
     --azure-endpoint https://<region>.codesigning.azure.net \
     --azure-account <signing-account> \
@@ -222,20 +228,24 @@ Common to both platforms:
 ```sh
 gh auth login                  # the release scripts use gh
 brew install msitools          # wixl and msiextract for the .msi packages
+xcode-select --install         # pkgbuild, productbuild and stapler for the .pkg packages
 ```
 
 ### macOS: Developer ID and notarization
 
-You need the **Developer ID Application** certificate and its private key in the login
-keychain. List the identities codesign can use, and pass the full quoted name as
-`--apple-identity`:
+You need two certificates with their private keys in the login keychain, both created
+under Certificates in the [Apple Developer account](https://developer.apple.com/account/resources/certificates/list):
+**Developer ID Application** signs the executables and **Developer ID Installer** signs
+the `.pkg` packages. List the identities and pass the full quoted names as
+`--apple-identity` and `--apple-installer-identity`:
 
 ```sh
-security find-identity -v -p codesigning
+security find-identity -v
 #  1) 0123ABCD... "Developer ID Application: <Organization> (<TEAMID>)"
+#  2) 4567EF01... "Developer ID Installer: <Organization> (<TEAMID>)"
 ```
 
-If the identity is missing or listed as invalid, import Apple's "Developer ID - G2"
+If an identity is missing or listed as invalid, import Apple's "Developer ID - G2"
 intermediate certificate from
 [Apple's certificate authority page](https://www.apple.com/certificateauthority/).
 

@@ -51,9 +51,9 @@ release="$DIST/release"
 info "Checking SHA256SUMS"
 (cd "$release" && shasum -a 256 --check --quiet SHA256SUMS) || die "files in $release do not match SHA256SUMS"
 if [[ -f "$DIST/notarized.sha256" ]]; then
-    info "Checking the macOS zips are the ones Apple notarized"
+    info "Checking the macOS zips and packages are the ones Apple notarized"
     (cd "$release" && shasum -a 256 --check --quiet "$ROOT/$DIST/notarized.sha256") ||
-        die "macOS zips changed after notarization"
+        die "macOS zips or packages changed after notarization"
 fi
 
 oses=(linux windows darwin)
