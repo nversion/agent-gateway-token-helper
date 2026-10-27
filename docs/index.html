@@ -899,7 +899,7 @@ var AGW = (function () {
                     installStep(c, os),
                     configStep(c, os),
                     loginStep(c, os),
-                    "Merge the tables into your Codex config. The gateway must route the OpenAI Responses API under <code>/v1/responses</code>.",
+                    "Merge the tables into your Codex config. The gateway must route the OpenAI Responses API under <code>/v1/responses</code>. An administrator can ship the file unchanged as <code>managed_config.toml</code> instead; see <a href=\"https://github.com/nversion/agent-gateway-token-helper/blob/main/docs/mdm.md#deploying-the-codex-settings\">Deploying with an MDM</a>.",
                     c.args.length ? "<code>auth.args</code> needs a recent Codex release. For an older one, drop the <code>args</code> line and point <code>command</code> at a copy of the binary named <code>" + xml(c.namedBinary) + "</code> (see the Other harnesses tab)." : null,
                     "Don't combine the <code>auth</code> table with <code>env_key</code> or <code>requires_openai_auth</code>."
                 ])

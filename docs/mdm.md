@@ -211,6 +211,33 @@ Place `managed-settings.json` in `/etc/claude-desktop/` with your configuration
 management. The file and directory must be owned by root, not symlinks and not writable
 by anyone else, or Claude Desktop ignores them.
 
+## Deploying the Codex settings
+
+Codex has an administrator layer for its settings: `managed_config.toml` holds defaults
+that Codex merges above each user's `config.toml` at every launch, so the
+[Codex guide](codex.md)'s `config.toml` goes into that file unchanged. Users can still
+change the values during a session, and they come back at the next start. OpenAI's
+[Managed configuration](https://learn.chatgpt.com/docs/enterprise/managed-configuration)
+page documents the layer; `requirements.toml`, the enforced counterpart, is for
+restricting settings and is not needed to point Codex at the gateway.
+
+**macOS and Linux:** place the file at `/etc/codex/managed_config.toml`, owned by root.
+Deploy it with a Jamf policy script, an Intune shell script under **Devices > macOS >
+Scripts**, or your configuration management. On macOS the same content can go in a
+configuration profile instead, which wins over the file: the preference domain is
+`com.openai.codex` and the key `config_toml_base64` holds the TOML encoded as base64 on
+one line, produced with `base64 -i config.toml | tr -d '\n'`. Deliver that key the same
+way as the [Claude Desktop profile](#macos-1), for example through Jamf's
+**Application & Custom Settings** or Intune's **Preference file** template with that
+domain and a plist holding the one key.
+
+**Windows:** Codex has no machine-wide location for managed defaults. It reads
+`%USERPROFILE%\.codex\managed_config.toml` for each user, so deploy the file in the
+user context: an Intune PowerShell script assigned to users, or a Group Policy
+Preferences **Files** item under **User Configuration** that copies it from a share.
+
+Codex reads the managed layer at startup, so users restart it after a change.
+
 ## Checking a device
 
 On the device, confirm the helper and its configuration first:

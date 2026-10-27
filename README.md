@@ -113,7 +113,7 @@ and a note on where each file goes on Windows, macOS and Linux. The guides expla
 - [Claude Code](docs/claude-code.md): model traffic and MCP servers.
 - [Claude Desktop](docs/claude-desktop.md): managed settings for Windows, macOS and Linux.
 - [Deploying with an MDM](docs/mdm.md): Intune, Jamf and Group Policy for the installers
-  and the Claude Desktop settings, and the download host Defender must allow.
+  and the Claude Desktop and Codex settings, and the download host Defender must allow.
 - [Codex](docs/codex.md): a custom model provider with command auth.
 - [Other harnesses](docs/other-harnesses.md): any command-based credential.
 - [Agent gateway](docs/agent-gateway.md): a minimal authentication and model-routing example.

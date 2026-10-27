@@ -21,6 +21,9 @@ timeout_ms = 300000
 refresh_interval_ms = 240000
 ```
 
+An administrator can ship the same tables to every machine as Codex's
+`managed_config.toml`; see [Deploying with an MDM](mdm.md#deploying-the-codex-settings).
+
 Codex sends requests to `base_url` plus `/responses`, so the gateway must route the
 OpenAI Responses API. `timeout_ms` has to cover a browser sign-in, hence 5 minutes
 here. Codex reruns the command every `refresh_interval_ms`, and the 4 minutes
