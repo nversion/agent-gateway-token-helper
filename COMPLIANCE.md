@@ -5,7 +5,8 @@ self-operated [agentgateway](https://agentgateway.dev), with `agw-token` signing
 in through the organization's existing identity provider.
 
 A *harness* is the AI assistant application the employee works in: Claude Desktop,
-Claude Code, Codex or any other tool that can run a command to obtain its credential.
+Claude Code, Codex (each as a desktop app, terminal tool or IDE extension) or any other
+tool that can run a command to obtain its credential.
 Harnesses differ in features, but in this setup they all behave the same way: they send
 prompts to the gateway and get their credential from `agw-token`. The rest of this
 document says "harness" for any of them.
@@ -115,7 +116,24 @@ or the vendor's updater owns the installed version. Status at the time of writin
 | Claude Code | The native install updates itself in the background from `downloads.claude.ai`. Homebrew, WinGet, apt, dnf and apk installs do not. | Managed settings `autoUpdatesChannel` (`stable` or `latest`), `minimumVersion`, `requiredMinimumVersion` and `requiredMaximumVersion`; `DISABLE_AUTOUPDATER` or `DISABLE_UPDATES` when the organization distributes the binary. Releases have a GPG-signed manifest, Apple and Authenticode code signatures, and signed Linux package repositories. |
 | Codex CLI | Does not update itself. Updated by rerunning the installer or the package manager (npm, Homebrew, WinGet). | The installed version is what MDM or the package manager put there. OpenAI's deployment guide pins it with the installer's `-Release` flag or an explicit npm version, packaged as an Intune Win32 app on Windows. |
 | Codex app (part of the ChatGPT desktop app) | Built-in updater checks and installs on its own, downloading from `persistent.oaistatic.com`. On Windows the Microsoft Store or Intune can update it as well. | Managed configuration `in_app_updates = false` under `[features]` in `requirements.toml` (`/etc/codex/requirements.toml`, `%ProgramData%\OpenAI\Codex\requirements.toml`, or the `com.openai.codex` macOS profile) turns the updater off. OpenAI offers no version pinning, so MDM or the Store then owns the version. |
+| Claude Code VS Code extension | Bundles its own copy of Claude Code; the extension version is the Claude Code version. Updated by VS Code's extension auto-update from the Marketplace. | Reads the same `~/.claude/settings.json` and managed settings as the CLI, so the gateway and helper configuration applies unchanged. Version and updates are governed by VS Code's own policies, below. |
+| Codex VS Code extension | Updated by VS Code's extension auto-update from the Marketplace. | Shares the configuration layers of the CLI (`config.toml`, `requirements.toml`), so the same managed configuration applies. Governed by VS Code's policies, below. |
 | `agw-token` | Never updates itself and contacts nothing but the identity provider. | MDM pushes the signed `.msi` or `.pkg`; see Supply chain above. |
+
+The managed settings that carry the gateway and helper configuration reach every
+surface of a harness. Claude Code reads them from `managed-settings.json` in a system
+directory, a `com.anthropic.claudecode` macOS profile or the `HKLM\SOFTWARE\Policies\ClaudeCode`
+registry key, and applies them in the terminal, the VS Code and JetBrains extensions and
+the desktop app's Code tab. Codex reads `requirements.toml` from `/etc/codex`,
+`%ProgramData%\OpenAI\Codex` or the `com.openai.codex` profile in the CLI and the IDE
+extension alike.
+
+The IDE extensions themselves are governed by VS Code's enterprise policies, delivered
+by Group Policy or Intune (registry key `Software\Policies\Microsoft\VSCode`), a macOS
+configuration profile, or `/etc/vscode/policy.json`: `AllowedExtensions` limits which
+extensions may be installed, `ExtensionsAutoUpdate` and `ExtensionsAutoUpdateDelay`
+control extension updates, `ExtensionGalleryServiceUrl` can point at a private gallery,
+and `UpdateMode` controls VS Code's own updates.
 
 Update checks and telemetry go to the vendor directly, not through the gateway. Allow or
 restrict that egress deliberately, and treat the harness like any other endpoint software
