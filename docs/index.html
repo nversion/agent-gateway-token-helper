@@ -213,6 +213,11 @@ sent anywhere. The background is in the
                 <input type="text" id="tenant" placeholder="contoso.onmicrosoft.com">
                 <small>Optional. Restricts sign-in to your tenant; empty means <code>organizations</code>.</small>
             </label>
+            <label>
+                <span class="name">Client ID</span>
+                <input type="text" id="entra-client-id" placeholder="00001111-aaaa-2222-bbbb-3333cccc4444">
+                <small>Optional. The Application (client) ID of <a href="https://github.com/nversion/agent-gateway-token-helper/blob/main/docs/configuration.md#microsoft-entra-id">your own app registration</a>; empty uses the Azure CLI's public client.</small>
+            </label>
         </div>
         <div id="google-opts" class="hidden">
             <label>
@@ -220,12 +225,22 @@ sent anywhere. The background is in the
                 <input type="text" id="hd" placeholder="example.com">
                 <small>Optional. Limits Google's account picker to this domain (<code>hd</code>); the gateway still has to check it.</small>
             </label>
+            <label>
+                <span class="name">Client ID</span>
+                <input type="text" id="google-client-id" placeholder="123456789012-abc.apps.googleusercontent.com">
+                <small>Optional. A "Desktop app" OAuth client from <a href="https://github.com/nversion/agent-gateway-token-helper/blob/main/docs/configuration.md#google-workspace">your Google Cloud project</a>; empty uses the gcloud SDK's public client.</small>
+            </label>
+            <label>
+                <span class="name">Client secret</span>
+                <input type="text" id="google-client-secret" placeholder="GOCSPX-...">
+                <small>Required with your own client ID. Google issues one for desktop clients and needs it in the token exchange; it is not treated as a secret.</small>
+            </label>
         </div>
         <div id="custom-opts" class="hidden">
             <label>
                 <span class="name">Profile name</span>
                 <input type="text" id="profile" value="work">
-                <small>Harnesses that can pass arguments use <code>--profile</code>. Harnesses that run the helper bare need a copy of the binary named <code>agw-token-&lt;profile&gt;</code>.</small>
+                <small>Claude Desktop, Claude Code and Codex pass <code>--profile</code> as an argument. Harnesses that run the helper bare need a copy of the binary named <code>agw-token-&lt;profile&gt;</code>.</small>
             </label>
             <label>
                 <span class="name">Issuer URL</span>
@@ -329,6 +344,7 @@ sent anywhere. The background is in the
     <a href="https://github.com/nversion/agent-gateway-token-helper/blob/main/docs/claude-code.md">Claude Code</a>,
     <a href="https://github.com/nversion/agent-gateway-token-helper/blob/main/docs/codex.md">Codex</a>,
     <a href="https://github.com/nversion/agent-gateway-token-helper/blob/main/docs/other-harnesses.md">other harnesses</a>,
+    <a href="https://github.com/nversion/agent-gateway-token-helper/blob/main/docs/mdm.md">MDM deployment</a>,
     <a href="https://github.com/nversion/agent-gateway-token-helper/blob/main/docs/configuration.md">configuration reference</a>.
 </footer>
 </main>
@@ -352,6 +368,8 @@ var AGW = (function () {
         var p = f.provider;
         var binary = p === "custom" ? "agw-token" : "agw-token-" + p;
         var profile = (f.profile || "").trim() || "default";
+        // The presets take an optional client of your own; the generic provider always needs one.
+        var clientId = p === "entra" ? f.entraClientId : p === "google" ? f.googleClientId : f.clientId;
         var c = {
             provider: p,
             gateway: (f.gateway || "").trim().replace(/\/+$/, ""),
@@ -360,7 +378,8 @@ var AGW = (function () {
             hd: (f.hd || "").trim(),
             profile: profile,
             issuer: (f.issuer || "").trim(),
-            clientId: (f.clientId || "").trim(),
+            clientId: (clientId || "").trim(),
+            clientSecret: p === "google" ? (f.googleClientSecret || "").trim() : "",
             scopes: (f.scopes || "").trim(),
             redirectPort: (f.redirectPort || "").trim(),
             hive: f.hive === "HKCU" ? "HKCU" : "HKLM",
@@ -415,6 +434,15 @@ var AGW = (function () {
             if (c.redirectPort && !/^\d{1,5}\+?$/.test(c.redirectPort)) { problems.push("Redirect port must be a number, optionally followed by + to also try the next 99 ports."); }
         }
         if (c.provider === "entra" && c.tenant && /[\s"\\]/.test(c.tenant)) { problems.push("The tenant may not contain spaces, quotes or backslashes."); }
+        if (c.provider === "entra" && c.clientId && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(c.clientId)) {
+            problems.push("The Entra client ID is the Application (client) ID of the app registration, a GUID such as 00001111-aaaa-2222-bbbb-3333cccc4444.");
+        }
+        if (c.provider === "google") {
+            if (c.clientId && !/^[A-Za-z0-9-]+\.apps\.googleusercontent\.com$/.test(c.clientId)) { problems.push("The Google client ID ends in .apps.googleusercontent.com."); }
+            if (c.clientId && !c.clientSecret) { problems.push("Enter the client secret of the Google desktop client; Google requires it in the token exchange."); }
+            if (c.clientSecret && !c.clientId) { problems.push("Enter the Google client ID that goes with the client secret."); }
+            if (/[\s"\\]/.test(c.clientId + c.clientSecret)) { problems.push("The Google client ID and secret may not contain spaces, quotes or backslashes."); }
+        }
         if (c.ttl >= 300) {
             warnings.push("A token cache of " + c.ttl + " seconds is not below agw-token's default min-valid of 5 minutes, so agw-token.json sets min-valid to " +
                 minValid(c) + ". Keep that below the token lifetime your provider issues.");
@@ -423,7 +451,13 @@ var AGW = (function () {
             warnings.push("A helper timeout under 2 minutes rarely covers a browser sign-in. Users must then sign in from a terminal first.");
         }
         if (c.provider === "custom") {
-            warnings.push("Claude Desktop passes --profile through inferenceCredentialHelperArgs, which needs a recent release. Codex and other harnesses that run the helper bare use a copy of the binary named " + c.namedBinary + " instead; the steps say where to put it.");
+            warnings.push("Claude Desktop passes --profile through inferenceCredentialHelperArgs and Codex through auth.args; both need a recent release. Other harnesses that run the helper bare use a copy of the binary named " + c.namedBinary + " instead; the steps say where to put it.");
+        }
+        if (c.provider === "entra" && c.clientId && !c.tenant) {
+            warnings.push("An app registration for a single tenant only works with the tenant set: the organizations endpoint accepts multitenant registrations only.");
+        }
+        if ((c.provider === "entra" || c.provider === "google") && c.clientId) {
+            warnings.push("The gateway must accept " + c.clientId + " as the token audience instead of the preset's client ID, and still check the organization (tid for Entra, hd for Google).");
         }
         return { problems: problems, warnings: warnings };
     }
@@ -434,8 +468,8 @@ var AGW = (function () {
     }
 
     function needsConfigFile(c) {
-        return c.provider === "custom" || (c.provider === "entra" && !!c.tenant) ||
-            (c.provider === "google" && !!c.hd) || c.ttl >= 300;
+        return c.provider === "custom" || (c.provider === "entra" && !!(c.tenant || c.clientId)) ||
+            (c.provider === "google" && !!(c.hd || c.clientId)) || c.ttl >= 300;
     }
 
     // ----- Encoders -----
@@ -565,9 +599,11 @@ var AGW = (function () {
         if (c.provider === "entra") {
             p.provider = "entra";
             if (c.tenant) { p.tenant = c.tenant; }
+            if (c.clientId) { p["client-id"] = c.clientId; }
             profiles["default"] = p;
         } else if (c.provider === "google") {
             p.provider = "google";
+            if (c.clientId) { p["client-id"] = c.clientId; p["client-secret"] = c.clientSecret; }
             if (c.hd) { p["extra-auth-params"] = { hd: c.hd }; }
             profiles["default"] = p;
         } else {
@@ -613,11 +649,11 @@ var AGW = (function () {
     // ----- Codex -----
 
     function genCodex(c, os) {
-        // Codex runs the command without arguments, so a profile uses the named binary.
+        // Codex passes auth.args to the command, so a profile uses the plain binary with --profile.
         var cmd = os === "windows"
-            ? "'" + c.namedPath.windows + "'"   // literal TOML string keeps the backslashes
-            : tomlString(c.namedPath[os]);
-        return [
+            ? "'" + c.path.windows + "'"   // literal TOML string keeps the backslashes
+            : tomlString(c.path[os]);
+        var lines = [
             'model_provider = "gateway"',
             "",
             "[model_providers.gateway]",
@@ -626,11 +662,13 @@ var AGW = (function () {
             'wire_api = "responses"',
             "",
             "[model_providers.gateway.auth]",
-            "command = " + cmd,
-            "timeout_ms = " + (c.timeout * 1000),
-            "refresh_interval_ms = " + (c.ttl * 1000),
-            ""
-        ].join("\n");
+            "command = " + cmd
+        ];
+        if (c.args.length) { lines.push("args = [" + c.args.map(tomlString).join(", ") + "]"); }
+        lines.push("timeout_ms = " + (c.timeout * 1000));
+        lines.push("refresh_interval_ms = " + (c.ttl * 1000));
+        lines.push("");
+        return lines.join("\n");
     }
 
     // ----- Other harnesses -----
@@ -784,9 +822,9 @@ var AGW = (function () {
                 configStep(c, "windows"),
                 loginStep(c, "windows"),
                 c.hive === "HKLM"
-                    ? "Import <code>claude-gateway.reg</code> as administrator (double-click it, or <code>reg import claude-gateway.reg</code> from an elevated prompt). Group Policy and Intune can write the same values."
+                    ? "Import <code>claude-gateway.reg</code> as administrator (double-click it, or <code>reg import claude-gateway.reg</code> from an elevated prompt). Group Policy and Intune can write the same values; see <a href=\"https://github.com/nversion/agent-gateway-token-helper/blob/main/docs/mdm.md#windows-1\">Deploying with an MDM</a>."
                     : "Import <code>claude-gateway.reg</code> as that user (double-click it, or <code>reg import claude-gateway.reg</code>). Nothing may be set under <code>HKLM\\SOFTWARE\\Policies\\Claude</code>, or these values are ignored.",
-                "Allow <code>downloads.claude.ai</code> through the firewall, install Claude Desktop (MSIX) and start it. The sign-in screen offers Claude Desktop on 3P."
+                "Allow the Claude Desktop process to reach <code>downloads.claude.ai</code> (Defender for Cloud Apps blocks it when Claude is tagged as unsanctioned; see <a href=\"https://github.com/nversion/agent-gateway-token-helper/blob/main/docs/mdm.md#network-claude-desktop-downloads-claude-code\">Deploying with an MDM</a>), install Claude Desktop (MSIX) and start it. The sign-in screen offers Claude Desktop on 3P."
             ])
         });
         out.push({
@@ -797,7 +835,7 @@ var AGW = (function () {
                 installStep(c, "macos") + " They are signed and notarized, so there is no Gatekeeper prompt.",
                 configStep(c, "macos"),
                 loginStep(c, "macos"),
-                "Upload the profile to Jamf, Kandji, Mosyle, Intune or another Apple MDM and scope it to the devices. It lands in <code>/Library/Managed Preferences/com.anthropic.claudefordesktop.plist</code>.",
+                "Upload the profile to Jamf, Kandji, Mosyle, Intune or another Apple MDM and scope it to the devices (steps per MDM in <a href=\"https://github.com/nversion/agent-gateway-token-helper/blob/main/docs/mdm.md#macos-1\">Deploying with an MDM</a>). It lands in <code>/Library/Managed Preferences/com.anthropic.claudefordesktop.plist</code>.",
                 "To test without an MDM, double-click the profile and approve it under System Settings &gt; General &gt; Device Management (admin password required). Remove it there to go back; while it is installed the in-app configuration window is read-only.",
                 "Install Claude Desktop and start it. Settings are read at launch, so quit and reopen the app after a change."
             ])
@@ -807,7 +845,7 @@ var AGW = (function () {
             dest: "The payload of your MDM's custom settings, preference domain com.anthropic.claudefordesktop. Prefer the .mobileconfig above when the MDM accepts one.",
             content: genPlist(c),
             steps: compact([
-                "Same steps as the .mobileconfig; this is only the inner payload for MDMs that ask for a plist and domain, such as Jamf's Application &amp; Custom Settings.",
+                "Same steps as the .mobileconfig; this is only the inner payload for MDMs that ask for a plist and domain, such as Jamf's Application &amp; Custom Settings or Intune's Preference file template.",
                 "For a throwaway test without an MDM or profile, copy it straight into the managed preferences and restart the preferences daemon: <code>sudo cp com.anthropic.claudefordesktop.plist /Library/Managed\\ Preferences/ &amp;&amp; sudo killall cfprefsd</code>. The daemon can overwrite or ignore a hand-placed file, so use the .mobileconfig for anything longer-lived, and <code>sudo rm</code> the file to undo.",
                 "The other way to test without an MDM is the in-app window: Help &gt; Troubleshooting &gt; Enable Developer Mode, then Developer &gt; Configure Third-Party Inference, enter these values and Apply Changes. That writes a local, user-editable configuration instead of a managed one."
             ])
@@ -860,9 +898,9 @@ var AGW = (function () {
                 steps: compact([
                     installStep(c, os),
                     configStep(c, os),
-                    namedBinaryStep(c, os),
-                    loginStep(c, os, true),
+                    loginStep(c, os),
                     "Merge the tables into your Codex config. The gateway must route the OpenAI Responses API under <code>/v1/responses</code>.",
+                    c.args.length ? "<code>auth.args</code> needs a recent Codex release. For an older one, drop the <code>args</code> line and point <code>command</code> at a copy of the binary named <code>" + xml(c.namedBinary) + "</code> (see the Other harnesses tab)." : null,
                     "Don't combine the <code>auth</code> table with <code>env_key</code> or <code>requires_openai_auth</code>."
                 ])
             });
@@ -895,7 +933,9 @@ var AGW = (function () {
                         "The file next to the binary wins over the user's own. <code>agw-token status</code> lists the files it read.",
                         c.provider === "custom"
                             ? "Register <code>" + xml(c.clientId || "the client") + "</code> at your provider as a public client with PKCE and redirect URI <code>http://localhost" + (c.redirectPort ? ":" + c.redirectPort.replace("+", "") : "") + "/callback</code>."
-                            : "Delete it again to go back to the preset defaults."
+                            : c.clientId
+                                ? "Register <code>" + xml(c.clientId) + "</code> as described in <a href=\"https://github.com/nversion/agent-gateway-token-helper/blob/main/docs/configuration.md#registering-your-own-client\">Registering your own client</a>, and accept it as the token audience on the gateway."
+                                : "Delete it again to go back to the preset defaults."
                     ]
                 });
             });
@@ -906,7 +946,7 @@ var AGW = (function () {
     var HARNESSES = [
         { id: "desktop", label: "Claude Desktop", intro: "Managed settings for Claude Desktop on third-party inference. Values are strings, as Claude Desktop expects in a profile or the registry." },
         { id: "code", label: "Claude Code", intro: "Claude Code reads the gateway URL and the API key helper from its user settings; MCP servers behind the gateway use a headers helper." },
-        { id: "codex", label: "Codex", intro: "Codex runs the credential command without arguments, so a profile is selected by the binary's name." },
+        { id: "codex", label: "Codex", intro: "Codex gets the bearer token from the command in the provider's auth table; a profile is passed with auth.args." },
         { id: "other", label: "Other harnesses", intro: "Any harness that can run a command for its credential. The commands print the token, or HTTP headers as JSON." },
         { id: "json", label: "agw-token.json", intro: "Settings agw-token itself needs for the chosen provider. Not needed for the plain presets." }
     ];
@@ -929,7 +969,8 @@ if (typeof document !== "undefined") {
     var $ = function (id) { return document.getElementById(id); };
     var STORAGE_KEY = "agw-harness-setup";
     var FIELDS = {
-        gateway: "gateway", mcpUrl: "mcp-url", tenant: "tenant", hd: "hd", profile: "profile", issuer: "issuer",
+        gateway: "gateway", mcpUrl: "mcp-url", tenant: "tenant", entraClientId: "entra-client-id", hd: "hd",
+        googleClientId: "google-client-id", googleClientSecret: "google-client-secret", profile: "profile", issuer: "issuer",
         clientId: "client-id", scopes: "scopes", redirectPort: "redirect-port", winDir: "win-dir", macDir: "mac-dir",
         linuxDir: "linux-dir", hive: "hive", regInts: "reg-ints", ttl: "ttl", timeout: "timeout", org: "org", prefix: "prefix"
     };

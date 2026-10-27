@@ -140,6 +140,9 @@ user of the machine. Its settings win over each user's own file (see
 [Where settings come from](#where-settings-come-from)), and upgrades and uninstalls leave
 it in place.
 
+[Deploying with an MDM](mdm.md#windows) has the Intune and Group Policy steps for the
+`.msi` and the machine-wide file.
+
 ## macOS installer
 
 The `.pkg` installs all three executables for every user of the machine, into
@@ -159,6 +162,8 @@ macOS keeps a receipt but has no uninstaller. To remove the files and the receip
 pkgutil --only-files --files dk.nversion.agw-token | sed 's|^|/|' | sudo xargs rm -f
 sudo pkgutil --forget dk.nversion.agw-token
 ```
+
+[Deploying with an MDM](mdm.md#macos) has the Jamf and Intune steps for the `.pkg`.
 
 ## Executable name
 
@@ -235,27 +240,111 @@ true; see [Google's ID-token validation guidance](https://developers.google.com/
 
 ## Registering your own client
 
-Register a **public** (native/desktop) client that uses the authorization code flow with
-PKCE and a loopback redirect URI:
+The presets borrow the gcloud and Azure CLI clients, whose token audiences every gcloud
+or Azure CLI user shares. Your own registration gives the gateway an audience that only
+your users can obtain, and lets the provider restrict who can sign in at all. Register a
+**public** (native/desktop) client that uses the authorization code flow with PKCE and a
+loopback redirect URI, then put its ID in a profile or pass it as a flag. The
+[setup generator](https://agw-token.nversion.dk/) has a client ID field for both presets
+and writes the `agw-token.json` below.
 
-- **Entra ID:** add the platform "Mobile and desktop applications" with redirect URI
-  `http://localhost`. Entra ignores the port for loopback addresses. Then run with
-  `--provider entra --client-id <app id> --tenant <tenant>`.
-- **Google:** create an OAuth client of type "Desktop app" and use both its client ID
-  and its (non-secret, for installed applications) client secret:
+### Microsoft Entra ID
 
-  ```sh
-  agw-token --provider google \
-    --client-id YOUR_CLIENT_ID.apps.googleusercontent.com \
-    --client-secret YOUR_DESKTOP_CLIENT_SECRET
-  ```
+1. In the [Microsoft Entra admin center](https://entra.microsoft.com), go to
+   **Entra ID** > **App registrations** > **New registration**. Enter a name users will
+   see on the consent screen, such as `Agent gateway`.
+2. Under **Supported account types**, keep **Single tenant only** so only accounts in
+   your tenant can sign in. Leave **Redirect URI** empty and select **Register**.
+3. On **Overview**, note the **Application (client) ID** and the
+   **Directory (tenant) ID**.
+4. Under **Manage** > **Authentication**, select **Add a platform** >
+   **Mobile and desktop applications**, enter the custom redirect URI `http://localhost`
+   and select **Configure**. Entra ignores the port of loopback redirect URIs, so the
+   random port the helper listens on matches. Nothing else on this page is needed:
+   **Allow public client flows** is for flows without a redirect URI.
+5. Under **API permissions**, the default delegated `User.Read` permission covers
+   `openid`, `profile`, `email` and `offline_access`. Each user is asked to consent on
+   first sign-in; **Grant admin consent for <tenant>** skips that prompt.
+6. Optional, to limit sign-in to specific users or groups: under **Entra ID** >
+   **Enterprise apps**, open the app, set **Assignment required?** to **Yes** under
+   **Properties**, and add them under **Users and groups**. Everyone else is refused
+   before a token is issued.
+7. Optional, for group-based rules on the gateway: under the app registration's
+   **Token configuration**, select **Add groups claim**. The ID token then carries the
+   group object IDs in `groups`; the Azure CLI client never does.
 
-  Keep `--provider google` so the Google scopes and offline-access parameters apply.
-  Add this client ID to the gateway's accepted Google audiences too.
-- **Keycloak, Okta, Auth0, Dex, …:** use a public client with PKCE (S256) and redirect
-  URI `http://localhost:8400/callback` with `--redirect-port 8400`, or the provider's
-  supported loopback-port matching syntax if it accepts variable ports. Include
-  `offline_access` in the scopes if the provider needs it to issue refresh tokens.
+Then configure the helper. A single-tenant registration also needs the tenant: the
+`organizations` endpoint the preset defaults to only accepts multitenant apps
+(`AADSTS50194`).
+
+```json
+{
+  "profiles": {
+    "default": {
+      "provider": "entra",
+      "tenant": "contoso.onmicrosoft.com",
+      "client-id": "00001111-aaaa-2222-bbbb-3333cccc4444"
+    }
+  }
+}
+```
+
+Or on the command line: `agw-token --provider entra --tenant <tenant> --client-id <app id>`.
+On the gateway, accept the application ID as the audience instead of the Azure CLI's,
+and keep checking `tid`.
+
+### Google Workspace
+
+1. In the [Google Cloud console](https://console.cloud.google.com/), select or create a
+   project that belongs to your Workspace organization. Projects outside an
+   organization cannot be made internal.
+2. Go to **APIs & Services** > **OAuth consent screen** (the **Google Auth Platform**
+   section). Under **Branding**, enter the app name, a support email and a developer
+   contact; under **Audience**, choose **Internal** so that only members of your
+   organization can authorize the app. Everyone else gets an `org_internal` error from
+   Google before any token is issued.
+3. The `openid` and `email` scopes the helper requests are not sensitive, so the app
+   needs no verification and no entries under **Data access**.
+4. Go to **Clients** > **Create client**, choose the application type **Desktop app**,
+   enter a name and select **Create**. Note the **Client ID** and the **Client secret**.
+   Desktop clients have no redirect URI list; Google accepts any loopback port.
+
+Google requires the client secret in the token exchange even for desktop apps, which
+cannot keep it confidential, so it is a configuration value rather than a secret. Keep
+`provider` set to `google` so the Google scopes and offline-access parameters still apply:
+
+```json
+{
+  "profiles": {
+    "default": {
+      "provider": "google",
+      "client-id": "123456789012-abc.apps.googleusercontent.com",
+      "client-secret": "GOCSPX-your-desktop-client-secret",
+      "extra-auth-params": { "hd": "example.com" }
+    }
+  }
+}
+```
+
+Or on the command line:
+
+```sh
+agw-token --provider google \
+  --client-id 123456789012-abc.apps.googleusercontent.com \
+  --client-secret GOCSPX-your-desktop-client-secret
+```
+
+On the gateway, accept this client ID as the audience instead of the gcloud SDK's, and
+keep requiring `email_verified` and an allowed `hd`: the internal audience setting is
+enforced by Google at sign-in, but the gateway should not depend on project settings it
+cannot see.
+
+### Other OIDC providers
+
+For Keycloak, Okta, Auth0, Dex and similar, use a public client with PKCE (S256) and
+redirect URI `http://localhost:8400/callback` with `--redirect-port 8400`, or the
+provider's supported loopback-port matching syntax if it accepts variable ports. Include
+`offline_access` in the scopes if the provider needs it to issue refresh tokens.
 
 Providers that require an exact redirect URI need a fixed port: `--redirect-port 8400`.
 Use `--redirect-port 8400+` to also try the next 99 ports.

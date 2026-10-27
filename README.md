@@ -17,7 +17,7 @@ others) can send to an [agentgateway](https://agentgateway.dev) instance. It wor
   Profiles and environment variables supply any further settings.
 - Release binaries are signed and notarized with a `.pkg` installer on macOS and signed
   with an MSI installer on Windows, so they can be deployed through MDM in enterprise
-  environments (see [Install](#install)).
+  environments (see [Install](#install) and [Deploying with an MDM](docs/mdm.md)).
 
 ## Install
 
@@ -112,9 +112,12 @@ and a note on where each file goes on Windows, macOS and Linux. The guides expla
 
 - [Claude Code](docs/claude-code.md): model traffic and MCP servers.
 - [Claude Desktop](docs/claude-desktop.md): managed settings for Windows, macOS and Linux.
+- [Deploying with an MDM](docs/mdm.md): Intune, Jamf and Group Policy for the installers
+  and the Claude Desktop settings, and the download host Defender must allow.
 - [Codex](docs/codex.md): a custom model provider with command auth.
 - [Other harnesses](docs/other-harnesses.md): any command-based credential.
 - [Agent gateway](docs/agent-gateway.md): a minimal authentication and model-routing example.
 - [Gateway deployment](docs/agent-gateway-deployment.md): Cloud Run and Kubernetes, UI access and per-person budgets.
 - [Configuration](docs/configuration.md): profiles, presets, your own client, token storage and validation.
 - [Development](DEVELOPMENT.md): building, testing, verifying and releasing.
+- [Compliance overview](COMPLIANCE.md): the full setup described for compliance and security review, with a diagram.

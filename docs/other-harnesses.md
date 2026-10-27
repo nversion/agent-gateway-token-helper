@@ -13,8 +13,10 @@ these ways:
 [binary named after the profile or provider](configuration.md#executable-name) such as
 `agw-token-google`, or a [build with a default provider](configuration.md#build-time-default-provider).
 
-[Claude Desktop](claude-desktop.md#passing-arguments) also supports arguments through
-`inferenceCredentialHelperArgs`, so it can select a profile with one installed executable.
+Claude Code's `apiKeyHelper` and `headersHelper` are shell commands, so arguments go in
+the string. [Claude Desktop](claude-desktop.md#passing-arguments) takes them as
+`inferenceCredentialHelperArgs` and [Codex](codex.md#passing-arguments) as `auth.args`,
+so all three can select a profile with one installed executable.
 
 Set the harness's credential cache lifetime below `min-valid`; 4 minutes works with
 the default 5 minutes. Check its command timeout and sign in from a terminal first if

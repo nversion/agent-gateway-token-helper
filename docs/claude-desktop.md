@@ -20,13 +20,18 @@ In a registry file or a configuration profile, every value is a string; Claude D
 also accepts `REG_DWORD` for the two integer keys. Only the Linux file takes JSON
 numbers and arrays.
 
-## Installing Claude Desktop on Windows
+## Installing Claude Desktop
 
-Install Claude Desktop via MSIX, as described in
+On Windows, install Claude Desktop via MSIX, as described in
 [Deploy Claude Desktop for Windows](https://support.claude.com/en/articles/12622703-deploy-claude-desktop-for-windows).
 
-Make sure the firewall allows `downloads.claude.ai`. Claude Desktop downloads the latest
-version of Claude Code from there, as a private copy it uses for chats and cowork.
+Make sure the firewall and endpoint protection allow the Claude Desktop process to reach
+`downloads.claude.ai`. Claude Desktop downloads the latest version of Claude Code from
+there, as a private copy it uses for chats and Cowork. Microsoft Defender for Cloud Apps
+blocks that host on every device when Claude is tagged as unsanctioned; see
+[Deploying with an MDM](mdm.md#network-claude-desktop-downloads-claude-code) for how to
+lift the block, and for rolling out the files on this page with Intune, Jamf or Group
+Policy.
 
 ## Model traffic through the gateway
 
@@ -39,7 +44,8 @@ It runs the helper with no arguments by default. Point it at `agw-token-entra` o
 The keys are described in the
 [configuration reference](https://claude.com/docs/third-party/claude-desktop/configuration),
 and [Deploy with MDM](https://claude.com/docs/third-party/claude-desktop/mdm) covers
-rolling them out with Jamf, Intune or Group Policy.
+rolling them out with Jamf, Intune or Group Policy. [Deploying with an MDM](mdm.md)
+has the steps for the files on this page and for the helper's installers.
 
 The examples below cache the token for 4 minutes (`inferenceCredentialHelperTtlSec`
 240), below `agw-token`'s default `min-valid` of 5 minutes, and give the helper 5 minutes

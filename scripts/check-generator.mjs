@@ -23,7 +23,8 @@ const AGW = sandbox.module.exports;
 if (!AGW || !AGW.cards) { throw new Error("AGW module not exported"); }
 
 const base = {
-    provider: "entra", gateway: "https://agw.example.com/", mcpUrl: "", tenant: "", hd: "", profile: "work",
+    provider: "entra", gateway: "https://agw.example.com/", mcpUrl: "", tenant: "", entraClientId: "", hd: "",
+    googleClientId: "", googleClientSecret: "", profile: "work",
     issuer: "", clientId: "", scopes: "openid email profile offline_access", redirectPort: "",
     winDir: "C:\\Program Files\\Agent Gateway helper\\", macDir: "/usr/local/bin/", linuxDir: "/opt/agw/bin",
     hive: "HKLM", regInts: "dword", ttl: "240", timeout: "300", org: "Contoso \"Quotes\" & Co", prefix: "com.contoso."
@@ -32,6 +33,9 @@ const configs = {
     entra: base,
     entraTenant: { ...base, tenant: "contoso.onmicrosoft.com", hive: "HKCU", regInts: "string", mcpUrl: "https://agw.example.com/mcp" },
     google: { ...base, provider: "google", hd: "example.com", ttl: "1800" },
+    // Own client registrations for the presets: agw-token.json carries the client, the harness files do not change.
+    entraClient: { ...base, tenant: "contoso.onmicrosoft.com", entraClientId: "00001111-AAAA-2222-bbbb-3333cccc4444" },
+    googleClient: { ...base, provider: "google", googleClientId: "123456789012-abc.apps.googleusercontent.com", googleClientSecret: "GOCSPX-not-a-secret" },
     custom: { ...base, provider: "custom", issuer: "https://idp.example.com/realms/main", clientId: "agent-gateway", redirectPort: "8400+" }
 };
 const uuids = { profile: "11111111-2222-4333-8444-555555555555", payload: "66666666-7777-4888-9999-AAAAAAAAAAAA" };
@@ -45,6 +49,10 @@ const expect = (cond, msg) => { if (!cond) { fail(msg); } };
 // A badly formed configuration must be reported, not silently generated.
 const bad = AGW.validate(AGW.derive({ ...base, gateway: "http://plain", ttl: "0", timeout: "900", winDir: "relative" }));
 expect(bad.problems.length >= 4, "validation should report four problems, got " + JSON.stringify(bad.problems));
+const badClient = AGW.validate(AGW.derive({ ...base, provider: "google", googleClientId: "123456789012-abc.apps.googleusercontent.com" }));
+expect(badClient.problems.length === 1 && /client secret/.test(badClient.problems[0]), "a Google client ID without its secret must be reported, got " + JSON.stringify(badClient.problems));
+const badEntra = AGW.validate(AGW.derive({ ...base, entraClientId: "not-a-guid" }));
+expect(badEntra.problems.length === 1 && /GUID/.test(badEntra.problems[0]), "an Entra client ID that is not a GUID must be reported, got " + JSON.stringify(badEntra.problems));
 
 for (const [name, form] of Object.entries(configs)) {
     const c = AGW.derive(form);
@@ -79,6 +87,10 @@ for (const [name, form] of Object.entries(configs)) {
                     const p = o.profiles[c.provider === "custom" ? c.profile : "default"];
                     expect(p, id + ": profile missing");
                     if (c.ttl >= 300) { expect(p["min-valid"] === "31m", id + ": min-valid, got " + p["min-valid"]); }
+                    if (c.provider !== "custom") {
+                        expect(p["client-id"] === (c.clientId || undefined), id + ": client-id, got " + p["client-id"]);
+                        expect(p["client-secret"] === (c.clientSecret || undefined), id + ": client-secret, got " + p["client-secret"]);
+                    }
                 }
                 if (k.file === "settings.json") { expect(o.env.CLAUDE_CODE_API_KEY_HELPER_TTL_MS === String(c.ttl * 1000), id + ": TTL ms"); }
                 if (k.file === ".mcp.json") { expect(/--output headers$/.test(o.mcpServers.gateway.headersHelper), id + ": headersHelper"); }
@@ -114,8 +126,10 @@ for (const [name, form] of Object.entries(configs)) {
                 expect(lines[0] === 'model_provider = "gateway"', id + ": first line");
                 expect(k.content.includes("base_url = \"https://agw.example.com/v1\""), id + ": base_url");
                 const cmd = lines.find((l) => l.startsWith("command = "));
-                if (k.os === "windows") { expect(cmd === "command = 'C:\\Program Files\\Agent Gateway helper\\" + c.namedBinary + ".exe'", id + ": windows command " + cmd); }
-                else { expect(cmd === `command = "${c.namedPath[k.os]}"`, id + ": command " + cmd); }
+                if (k.os === "windows") { expect(cmd === "command = 'C:\\Program Files\\Agent Gateway helper\\" + c.binary + ".exe'", id + ": windows command " + cmd); }
+                else { expect(cmd === `command = "${c.path[k.os]}"`, id + ": command " + cmd); }
+                const args = lines.find((l) => l.startsWith("args = "));
+                expect(args === (c.args.length ? 'args = ["--profile", "work"]' : undefined), id + ": args line " + args);
                 expect(k.content.includes("refresh_interval_ms = " + c.ttl * 1000), id + ": refresh interval");
                 expect(k.content.includes("timeout_ms = " + c.timeout * 1000), id + ": timeout");
                 break;

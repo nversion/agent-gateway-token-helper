@@ -28,3 +28,23 @@ here stays under `agw-token`'s default `min-valid` of 5 minutes, so it never hol
 expired token. Use a single-quoted TOML string for Windows paths so the backslashes are
 kept as written. Don't combine the `auth` table with `env_key` or
 `requires_openai_auth`.
+
+## Passing arguments
+
+Recent Codex releases also take `args`, an array of arguments for the command, so the
+plain `agw-token` can select a profile from
+[`agw-token.json`](configuration.md#where-settings-come-from) or any other flag:
+
+```toml
+[model_providers.gateway.auth]
+command = "/usr/local/bin/agw-token"
+args = ["--profile", "work"]
+timeout_ms = 300000
+refresh_interval_ms = 240000
+```
+
+The arguments can instead be `["--provider", "entra", "--tenant", "contoso.onmicrosoft.com"]`.
+Codex runs the command directly, not through a shell, so each argument is one array
+element. For a Codex release without `args`, drop the line and point `command` at
+`agw-token-entra`, `agw-token-google` or a
+[binary named for the profile](configuration.md#executable-name).
